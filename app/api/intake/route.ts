@@ -1,7 +1,7 @@
-import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { randomUUID } from "crypto";
+import { mkdir, writeFile } from "fs/promises";
+import os from "os";
+import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const intake_id = crypto.randomUUID();
+  const intake_id = randomUUID();
   const ext =
     mime === "application/pdf"
       ? "pdf"
@@ -74,10 +74,10 @@ export async function POST(req: NextRequest) {
   const baseDir =
     process.env.LEAFLET_INTAKE_DIR?.trim() ||
     path.join(os.tmpdir(), "leaflet-intake");
-  await fs.mkdir(baseDir, { recursive: true });
+  await mkdir(baseDir, { recursive: true });
 
   const stored_path = path.join(baseDir, `${intake_id}.${ext}`);
-  await fs.writeFile(stored_path, buf);
+  await writeFile(stored_path, buf);
 
   return NextResponse.json(
     {
