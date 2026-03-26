@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getProductTypeImageUrl, uploadProductTypeImage } from "@/lib/product-types";
 import { isValidImageKey } from "@/lib/product-types/image-keys";
 
 type RequestRow = {
@@ -49,7 +50,7 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
     setSuccess(null);
     setSavingId(row.id);
     try {
-      const res = await fetch("/api/product-types/generation-request", {
+      const res = await fetch("/api/generation-request", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -156,7 +157,19 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                   </p>
 
               <dl className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
-                <div><dt className="text-xs text-slate-500">candidateImageKey</dt><dd>{r.candidate_image_key ?? "—"}</dd></div>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <dt className="text-xs text-slate-500">candidateImageKey</dt>
+                  <dd className="mt-1 flex flex-wrap items-center gap-2">
+                    <span>{r.candidate_image_key ?? "—"}</span>
+                    {r.candidate_image_key ? (
+                      <img
+                        src={getProductTypeImageUrl(r.candidate_image_key)}
+                        alt=""
+                        className="h-10 w-10 rounded object-contain ring-1 ring-slate-200"
+                      />
+                    ) : null}
+                  </dd>
+                </div>
                 <div><dt className="text-xs text-slate-500">status</dt><dd>{r.status}</dd></div>
                 <div><dt className="text-xs text-slate-500">createdAt</dt><dd>{fmt(r.created_at)}</dd></div>
               </dl>
@@ -179,6 +192,35 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                   placeholder="final image key"
                   className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
                 />
+                <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      void (async () => {
+                        setError(null);
+                        try {
+                          const key = await uploadProductTypeImage(file);
+                          setResolvedKeyById((prev) => ({ ...prev, [r.id]: key }));
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Nahrání souboru selhalo.");
+                        }
+                      })();
+                    }}
+                  />
+                  Nahrát soubor
+                </label>
+                {(resolvedKeyById[r.id] ?? r.resolved_image_key) ? (
+                  <img
+                    src={getProductTypeImageUrl(resolvedKeyById[r.id] ?? r.resolved_image_key)}
+                    alt=""
+                    className="h-12 w-12 rounded object-contain ring-1 ring-slate-200"
+                  />
+                ) : null}
                 <label className="flex items-center gap-1 text-xs text-slate-600">
                   <input
                     type="checkbox"

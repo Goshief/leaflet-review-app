@@ -2,11 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { getProductTypeImageUrl, uploadProductTypeImage } from "@/lib/product-types";
 import { getAvailableImageKeys } from "@/lib/product-types/image-keys";
 import { buildImageReviewPatch } from "@/lib/product-types/image-review-actions";
 import { getMissingAssetWorkflowState } from "@/lib/product-types/missing-asset-workflow";
 import {
   canBatchItemRunSaveAction,
+  IMAGE_MISSING_STATUS_MESSAGE,
   resolveBatchItemImageState,
 } from "@/lib/product-types/resolve-batch-item-image-state";
 
@@ -149,7 +151,7 @@ export function BatchItemsTableEditor({ items }: Props) {
     if (!editing || !form) return;
     setError(null);
     if (!canBatchItemRunSaveAction(editing)) {
-      setError("Produkt nemá obrázek v galerii. Nejdřív přidej nebo vygeneruj obrázek.");
+      setError(IMAGE_MISSING_STATUS_MESSAGE);
       return;
     }
 
@@ -298,6 +300,57 @@ export function BatchItemsTableEditor({ items }: Props) {
     }
   };
 
+  const onUploadProductTypeImageForRow = (item: BatchCommittedItem, file: File) => {
+    const rowKey = rowKeyOf(item);
+    void (async () => {
+      setError(null);
+      setSuccess(null);
+      setReviewSavingKey(rowKey);
+      try {
+        const imageKey = await uploadProductTypeImage(file);
+        const res = await fetch("/api/batches/item", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: item.id,
+            import_id: item.import_id,
+            source_table: item.source_table,
+            patch: {
+              approved_image_key: imageKey,
+              image_review_status: "manual_override",
+            },
+          }),
+        });
+        const json = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          message?: string;
+          item?: BatchCommittedItem;
+        };
+        if (!res.ok || !json?.ok) {
+          throw new Error(json?.error || json?.message || "Nahrání obrázku se nepodařilo uložit.");
+        }
+        if (json.item) {
+          setRows((prev) =>
+            prev.map((row) =>
+              row.id === json.item!.id &&
+              row.import_id === json.item!.import_id &&
+              row.source_table === json.item!.source_table
+                ? json.item!
+                : row
+            )
+          );
+        }
+        setSuccess("Obrázek byl nahrán do úložiště a uložen jako image key.");
+        router.refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Nahrání obrázku selhalo.");
+      } finally {
+        setReviewSavingKey(null);
+      }
+    })();
+  };
+
   const onRequestImageGeneration = (item: BatchCommittedItem) => {
     const rowKey = rowKeyOf(item);
     void (async () => {
@@ -306,7 +359,7 @@ export function BatchItemsTableEditor({ items }: Props) {
       setReviewSavingKey(rowKey);
       try {
         const imageState = resolveBatchItemImageState(item);
-        const res = await fetch("/api/product-types/generation-request", {
+        const res = await fetch("/api/generation-request", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -377,8 +430,15 @@ export function BatchItemsTableEditor({ items }: Props) {
             <dt className="text-xs text-slate-500">Stav obrázku</dt>
             <dd className="mt-1">
               {imageState.hasValidImage ? (
-                <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
-                  image_key: {imageState.resolvedImageKey}
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
+                    image_key: {imageState.resolvedImageKey}
+                  </span>
+                  <img
+                    src={getProductTypeImageUrl(imageState.resolvedImageKey)}
+                    alt=""
+                    className="h-12 w-12 rounded-lg object-contain ring-1 ring-slate-200"
+                  />
                 </span>
               ) : (
                 <span className="inline-flex items-center rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900">
@@ -399,14 +459,19 @@ export function BatchItemsTableEditor({ items }: Props) {
                 >
                   Generuj obrázek
                 </button>
-                <a
-                  href="/product-types/gallery.html"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Přidat do galerie
-                </a>
+                <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) onUploadProductTypeImageForRow(item, file);
+                    }}
+                  />
+                  Nahrát do úložiště
+                </label>
                 {missingAssetState.showGenerationRequested ? (
                   <span className="text-xs text-indigo-700">Požadavek na generování zaznamenán.</span>
                 ) : null}
@@ -546,23 +611,37 @@ export function BatchItemsTableEditor({ items }: Props) {
                   >
                     Generuj obrázek
                   </button>
-                  <a
-                    href="/product-types/gallery.html"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Přidat do galerie
-                  </a>
+                  <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file && editing) onUploadProductTypeImageForRow(editing, file);
+                      }}
+                    />
+                    Nahrát do úložiště
+                  </label>
                   {editingMissingAssetState?.showGenerationRequested ? (
                     <span className="text-xs text-indigo-700">Požadavek na generování zaznamenán.</span>
                   ) : null}
                 </div>
               </div>
             ) : (
-              <p className="mt-3 text-xs text-emerald-700">
-                image_key: {editingImageState?.resolvedImageKey}
-              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <p className="text-xs text-emerald-700">
+                  image_key: {editingImageState?.resolvedImageKey}
+                </p>
+                {editingImageState?.resolvedImageKey ? (
+                  <img
+                    src={getProductTypeImageUrl(editingImageState.resolvedImageKey)}
+                    alt=""
+                    className="h-14 w-14 rounded-lg object-contain ring-1 ring-slate-200"
+                  />
+                ) : null}
+              </div>
             )}
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">

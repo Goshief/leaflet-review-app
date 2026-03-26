@@ -1,7 +1,7 @@
 import { isValidImageKey } from "./image-keys.ts";
 
 export const IMAGE_MISSING_STATUS_MESSAGE =
-  "Produkt nemá obrázek v galerii. Nejdřív přidej nebo vygeneruj obrázek.";
+  "Produkt nemá obrázek v úložišti (Supabase bucket product-types). Nahraj soubor nebo zadej platný image key.";
 
 export type BatchItemImageLike = {
   approved_image_key?: string | null;
@@ -34,7 +34,7 @@ export function resolveBatchItemImageState(item: BatchItemImageLike): BatchItemI
     resolvedImageKey: resolved,
     hasValidImage: true,
     imageMissing: false,
-    imageStatusMessage: "Obrázek je připravený v galerii.",
+    imageStatusMessage: "Obrázek je připravený v Supabase Storage.",
   };
 }
 

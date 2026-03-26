@@ -1,111 +1,137 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="cs">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Product Types Gallery</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Galerie product-types</title>
     <style>
       body {
         margin: 0;
-        font-family: Arial, sans-serif;
-        background: #f8fafc;
-        color: #0f172a;
-      }
-      .wrap {
-        max-width: 1000px;
-        margin: 0 auto;
+        font-family: system-ui, sans-serif;
         padding: 24px;
+        color: #0f172a;
       }
       h1 {
         margin: 0 0 8px;
       }
-      p {
-        margin: 0 0 16px;
-        color: #475569;
+      #hint {
+        color: #b45309;
+        margin: 8px 0 16px;
       }
       .grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-        gap: 12px;
+        gap: 16px;
+        margin-top: 24px;
       }
       .card {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 10px;
-      }
-      .img-wrap {
-        height: 120px;
+        border: 1px solid #ddd;
         border-radius: 8px;
-        background: #f1f5f9;
-        display: grid;
-        place-items: center;
-        overflow: hidden;
+        padding: 12px;
       }
-      img {
-        max-width: 100%;
-        max-height: 100%;
+      .card img {
+        width: 100%;
+        height: 140px;
         object-fit: contain;
       }
-      code {
-        display: block;
-        margin-top: 8px;
-        font-size: 12px;
-        color: #334155;
-      }
       .missing {
-        color: #b91c1c;
+        color: red;
+        font-weight: 700;
+        margin-top: 8px;
+        display: none;
+      }
+      .name {
+        margin-top: 8px;
+        font-size: 14px;
+      }
+      .url {
+        margin-top: 6px;
+        font-size: 12px;
+        word-break: break-all;
+        opacity: 0.7;
       }
     </style>
   </head>
   <body>
-    <main class="wrap">
-      <h1>Galerie product-types</h1>
-      <p>Lokální obrázky bez externího fetch. Chybějící soubor je označen červeně.</p>
-      <section class="grid" id="grid"></section>
-    </main>
-
+    <h1>Galerie product-types</h1>
+    <p>Supabase Storage (bucket <code>product-types</code>)</p>
+    <p id="hint" hidden></p>
+    <div class="grid" id="grid"></div>
     <script>
-      const keys = [
-        "butter",
-        "cheese",
-        "chocolate_bar",
-        "drink_can",
-        "cola_bottle",
-        "alcohol_bottle",
-        "cream",
-        "chicken_meat",
-        "beer",
-        "mandarins",
-        "grapes",
-        "placeholder",
-      ];
+      (function () {
+        var BUCKET = "product-types";
+        var files = [
+          "butter.png",
+          "cheese.png",
+          "chocolate_bar.png",
+          "drink_can.png",
+          "cola_bottle.png",
+          "alcohol_bottle.png",
+          "cream.png",
+          "chicken_meat.png",
+          "beer.png",
+          "mandarins.png",
+          "grapes.png",
+          "placeholder.png",
+        ];
 
-      const grid = document.getElementById("grid");
-      keys.forEach((key) => {
-        const card = document.createElement("article");
-        card.className = "card";
+        function publicImageUrl(base, file) {
+          var clean = String(file)
+            .replace(/^\/+/, "")
+            .replace(/^product-types\/+/, "");
+          var u = String(base || "").replace(/\/$/, "");
+          return u + "/storage/v1/object/public/" + BUCKET + "/" + clean;
+        }
 
-        const wrap = document.createElement("div");
-        wrap.className = "img-wrap";
+        function showHint(msg) {
+          var el = document.getElementById("hint");
+          el.textContent = msg;
+          el.hidden = false;
+        }
 
-        const img = document.createElement("img");
-        img.src = `/product-types/${key}.png`;
-        img.alt = key;
-
-        const label = document.createElement("code");
-        label.textContent = `/product-types/${key}.png`;
-
-        img.onerror = () => {
-          card.classList.add("missing");
-          wrap.textContent = "Nenalezeno";
-        };
-
-        wrap.appendChild(img);
-        card.appendChild(wrap);
-        card.appendChild(label);
-        grid.appendChild(card);
-      });
+        fetch("/api/gallery-public-config")
+          .then(function (r) {
+            if (!r.ok) throw new Error("config " + r.status);
+            return r.json();
+          })
+          .then(function (cfg) {
+            var supabaseUrl = cfg.supabaseUrl || "";
+            if (!supabaseUrl) {
+              showHint("Chybí NEXT_PUBLIC_SUPABASE_URL v prostředí.");
+              return;
+            }
+            var grid = document.getElementById("grid");
+            files.forEach(function (file) {
+              var url = publicImageUrl(supabaseUrl, file);
+              var card = document.createElement("div");
+              card.className = "card";
+              var img = document.createElement("img");
+              img.src = url;
+              img.alt = file;
+              var missing = document.createElement("div");
+              missing.className = "missing";
+              missing.textContent = "Nenalezeno";
+              img.onerror = function () {
+                img.style.display = "none";
+                missing.style.display = "block";
+              };
+              var name = document.createElement("div");
+              name.className = "name";
+              name.textContent = file;
+              var u = document.createElement("div");
+              u.className = "url";
+              u.textContent = url;
+              card.appendChild(img);
+              card.appendChild(missing);
+              card.appendChild(name);
+              card.appendChild(u);
+              grid.appendChild(card);
+            });
+          })
+          .catch(function () {
+            showHint("Nepodařilo se načíst konfiguraci (zkontroluj deploy a /api/gallery-public-config).");
+          });
+      })();
     </script>
   </body>
 </html>

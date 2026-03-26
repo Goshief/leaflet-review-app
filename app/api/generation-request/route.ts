@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       message: "Požadavek na generování obrázku selhal.",
       requestId,
       cause: e,
-      logContext: { route: "/api/product-types/generation-request" },
+      logContext: { route: "/api/generation-request" },
     });
   }
 }
@@ -136,8 +136,7 @@ export async function PATCH(req: NextRequest) {
       message: "Aktualizace požadavku na generování obrázku selhala.",
       requestId,
       cause: e,
-      logContext: { route: "/api/product-types/generation-request", method: "PATCH" },
+      logContext: { route: "/api/generation-request", method: "PATCH" },
     });
   }
 }
-

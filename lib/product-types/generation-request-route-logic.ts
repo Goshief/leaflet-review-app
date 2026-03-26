@@ -242,7 +242,7 @@ export async function updateGenerationRequestLifecycle(
     return {
       ok: false as const,
       status: 400,
-      error: "Finální image key není validní pro galerii.",
+      error: "Finální image key není platný (whitelist nebo název souboru v úložišti).",
     };
   }
 

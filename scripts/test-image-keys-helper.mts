@@ -16,6 +16,7 @@ assert.equal(isValidImageKey("butter"), true);
 assert.equal(isValidImageKey("cheese"), true);
 assert.equal(isValidImageKey("placeholder"), true);
 assert.equal(isValidImageKey("unknown_key"), false);
+assert.equal(isValidImageKey("uploaded-asset.png"), true);
 assert.equal(isValidImageKey(""), false);
 assert.equal(isValidImageKey(null), false);
 assert.equal(isValidImageKey(undefined), false);

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { getMissingAssetWorkflowState } from "../lib/product-types/missing-asset-workflow.ts";
+import {
+  IMAGE_MISSING_STATUS_MESSAGE,
+} from "../lib/product-types/resolve-batch-item-image-state.ts";
 
 {
   const state = getMissingAssetWorkflowState(
@@ -7,7 +10,7 @@ import { getMissingAssetWorkflowState } from "../lib/product-types/missing-asset
       resolvedImageKey: null,
       hasValidImage: false,
       imageMissing: true,
-      imageStatusMessage: "Produkt nemá obrázek v galerii. Nejdřív přidej nebo vygeneruj obrázek.",
+      imageStatusMessage: IMAGE_MISSING_STATUS_MESSAGE,
     },
     false
   );
@@ -21,7 +24,7 @@ import { getMissingAssetWorkflowState } from "../lib/product-types/missing-asset
       resolvedImageKey: null,
       hasValidImage: false,
       imageMissing: true,
-      imageStatusMessage: "Produkt nemá obrázek v galerii. Nejdřív přidej nebo vygeneruj obrázek.",
+      imageStatusMessage: IMAGE_MISSING_STATUS_MESSAGE,
     },
     true
   );
@@ -35,7 +38,7 @@ import { getMissingAssetWorkflowState } from "../lib/product-types/missing-asset
       resolvedImageKey: "butter",
       hasValidImage: true,
       imageMissing: false,
-      imageStatusMessage: "Obrázek je připravený v galerii.",
+      imageStatusMessage: "Obrázek je připravený v Supabase Storage.",
     },
     true
   );

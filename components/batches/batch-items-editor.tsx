@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BatchItemTable } from "@/lib/batches/item-update";
+import { getProductTypeImageUrl } from "@/lib/product-types";
 import {
   canBatchItemRunSaveAction,
+  IMAGE_MISSING_STATUS_MESSAGE,
   resolveBatchItemImageState,
 } from "@/lib/product-types/resolve-batch-item-image-state";
 
@@ -141,7 +143,7 @@ export function BatchItemsEditor({ items }: Props) {
     setError(null);
     setSuccess(null);
     if (!canBatchItemRunSaveAction(editing)) {
-      setError("Produkt nemá obrázek v galerii. Nejdřív přidej nebo vygeneruj obrázek.");
+      setError(IMAGE_MISSING_STATUS_MESSAGE);
       return;
     }
 
@@ -340,7 +342,16 @@ export function BatchItemsEditor({ items }: Props) {
                 {editingImageState.imageStatusMessage}
               </p>
             ) : (
-              <p className="mt-3 text-xs text-emerald-700">image_key: {editingImageState?.resolvedImageKey}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <p className="text-xs text-emerald-700">image_key: {editingImageState?.resolvedImageKey}</p>
+                {editingImageState?.resolvedImageKey ? (
+                  <img
+                    src={getProductTypeImageUrl(editingImageState.resolvedImageKey)}
+                    alt=""
+                    className="h-14 w-14 rounded-lg object-contain ring-1 ring-slate-200"
+                  />
+                ) : null}
+              </div>
             )}
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
