@@ -174,67 +174,89 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                 <div><dt className="text-xs text-slate-500">createdAt</dt><dd>{fmt(r.created_at)}</dd></div>
               </dl>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={savingId === r.id || r.status !== "pending"}
-                  onClick={() => void onUpdate(r, "processing")}
-                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800 disabled:opacity-50"
-                >
-                  Mark as processing
-                </button>
+              <div className="mt-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={savingId === r.id || r.status !== "pending"}
+                    onClick={() => void onUpdate(r, "processing")}
+                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800 disabled:opacity-50"
+                  >
+                    Mark as processing
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingId === r.id || r.status !== "processing"}
+                    onClick={() => void onUpdate(r, "done")}
+                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 disabled:opacity-50"
+                  >
+                    Mark as done
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingId === r.id || (r.status !== "pending" && r.status !== "processing")}
+                    onClick={() => void onUpdate(r, "error")}
+                    className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-800 disabled:opacity-50"
+                  >
+                    Mark as error
+                  </button>
+                </div>
 
-                <input
-                  value={resolvedKeyById[r.id] ?? r.resolved_image_key ?? ""}
-                  onChange={(e) =>
-                    setResolvedKeyById((prev) => ({ ...prev, [r.id]: e.target.value }))
-                  }
-                  placeholder="katalogový image key (např. butter)"
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
-                  title="Musí odpovídat souboru v bucketu product-types"
-                />
-                {(resolvedKeyById[r.id] ?? r.resolved_image_key) ? (
-                  <img
-                    src={getProductTypeImageUrl(resolvedKeyById[r.id] ?? r.resolved_image_key)}
-                    alt=""
-                    className="h-12 w-12 rounded object-contain ring-1 ring-slate-200"
-                  />
-                ) : null}
-                <label className="flex items-center gap-1 text-xs text-slate-600">
+                <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
+                  <div className="flex min-w-[12rem] flex-col gap-1">
+                    <label
+                      htmlFor={`resolved-key-${r.id}`}
+                      className="text-xs font-medium text-slate-600"
+                    >
+                      Finální image key
+                    </label>
+                    <input
+                      id={`resolved-key-${r.id}`}
+                      type="text"
+                      inputMode="text"
+                      autoComplete="off"
+                      value={resolvedKeyById[r.id] ?? r.resolved_image_key ?? ""}
+                      onChange={(e) =>
+                        setResolvedKeyById((prev) => ({ ...prev, [r.id]: e.target.value }))
+                      }
+                      placeholder="např. butter nebo butter.png"
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
+                      title="Katalogový klíč nebo název souboru v bucketu product-types"
+                    />
+                  </div>
+                  {(resolvedKeyById[r.id] ?? r.resolved_image_key) ? (
+                    <img
+                      src={getProductTypeImageUrl(resolvedKeyById[r.id] ?? r.resolved_image_key)}
+                      alt=""
+                      className="h-12 w-12 rounded object-contain ring-1 ring-slate-200"
+                    />
+                  ) : null}
+                  <label className="flex cursor-pointer items-center gap-1.5 pb-1 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={applyToBatchById[r.id] === true}
+                      onChange={(e) =>
+                        setApplyToBatchById((prev) => ({ ...prev, [r.id]: e.target.checked }))
+                      }
+                    />
+                    propsat do batch item
+                  </label>
+                </div>
+                <p className="text-[11px] leading-snug text-slate-500">
+                  Zadej klíč z katalogu (whitelist / galerie), žádné nahrávání souboru — jen text do DB a náhled z úložiště.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2">
                   <input
-                    type="checkbox"
-                    checked={applyToBatchById[r.id] === true}
+                    id={`error-note-${r.id}`}
+                    value={errorNoteById[r.id] ?? r.error_note ?? ""}
                     onChange={(e) =>
-                      setApplyToBatchById((prev) => ({ ...prev, [r.id]: e.target.checked }))
+                      setErrorNoteById((prev) => ({ ...prev, [r.id]: e.target.value }))
                     }
+                    placeholder="poznámka k chybě (volitelné)"
+                    className="min-w-[10rem] flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
                   />
-                  propsat do batch item
-                </label>
-                <button
-                  type="button"
-                  disabled={savingId === r.id || r.status !== "processing"}
-                  onClick={() => void onUpdate(r, "done")}
-                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 disabled:opacity-50"
-                >
-                  Mark as done
-                </button>
-
-                <input
-                  value={errorNoteById[r.id] ?? r.error_note ?? ""}
-                  onChange={(e) =>
-                    setErrorNoteById((prev) => ({ ...prev, [r.id]: e.target.value }))
-                  }
-                  placeholder="error note"
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
-                />
-                <button
-                  type="button"
-                  disabled={savingId === r.id || (r.status !== "pending" && r.status !== "processing")}
-                  onClick={() => void onUpdate(r, "error")}
-                  className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-800 disabled:opacity-50"
-                >
-                  Mark as error
-                </button>
+                </div>
               </div>
                 </article>
               );
