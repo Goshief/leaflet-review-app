@@ -1,0 +1,61 @@
+{
+  "name": "leaflet-review-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test:safe-error-contract": "node scripts/test-safe-error-contract.mts",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test:parser": "node --experimental-strip-types scripts/verify-parser.mts",
+    "test:map-offers": "node --experimental-strip-types scripts/test-map-offers.mts",
+    "test:quarantine": "node --experimental-strip-types scripts/test-quarantine.mts",
+    "test:commit-error-shape": "node scripts/test-commit-error-shape.mts",
+    "test:stats-error-shape": "node scripts/test-stats-error-shape.mts",
+    "test:commit-flow": "node --experimental-strip-types scripts/test-commit-flow.mts",
+    "test:dashboard-metrics": "node --experimental-strip-types scripts/test-dashboard-metrics.mts",
+    "test:dashboard-yesterday-coverage": "node --experimental-strip-types scripts/test-dashboard-yesterday-coverage.mts",
+    "test:dashboard-configured-env": "node --experimental-strip-types scripts/test-dashboard-configured-env.mts",
+    "test:dashboard-trend-nonzero": "node --experimental-strip-types scripts/test-dashboard-trend-nonzero.mts",
+    "test:dashboard-timestamp-fallbacks": "node --experimental-strip-types scripts/test-dashboard-timestamp-fallbacks.mts",
+    "test:dashboard-raw-null-created-at": "node --experimental-strip-types scripts/test-dashboard-raw-null-created-at.mts",
+    "test:timezone-boundary": "node --experimental-strip-types scripts/test-timezone-boundary.mts",
+    "test:routing-overview-quarantine": "node --experimental-strip-types scripts/test-routing-overview-quarantine.mts",
+    "test:review-filter-state": "node --experimental-strip-types scripts/test-review-filter-state.mts",
+    "test:batch-item-update-validation": "node --experimental-strip-types scripts/test-batch-item-update-validation.mts",
+    "test:batch-item-update-flow": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/test-batch-item-update-flow.mts",
+    "test:image-keys-helper": "node --experimental-strip-types scripts/test-image-keys-helper.mts",
+    "test:batch-item-image-state": "node --experimental-strip-types scripts/test-batch-item-image-state.mts",
+    "test:image-review-actions": "node --experimental-strip-types scripts/test-image-review-actions.mts",
+    "test:missing-asset-workflow": "node --experimental-strip-types scripts/test-missing-asset-workflow.mts",
+    "test:generation-request-flow": "node --experimental-strip-types scripts/test-generation-request-flow.mts",
+    "test:generation-request-lifecycle": "node --experimental-strip-types scripts/test-generation-request-lifecycle.mts",
+    "test:stabilization": "npm run test:commit-error-shape && npm run test:stats-error-shape && npm run test:commit-flow && npm run test:dashboard-metrics && npm run test:dashboard-yesterday-coverage && npm run test:dashboard-trend-nonzero && npm run test:dashboard-timestamp-fallbacks && npm run test:dashboard-raw-null-created-at && npm run test:timezone-boundary && npm run test:routing-overview-quarantine && npm run test:review-filter-state",
+    "verify": "npm run test:commit-error-shape && npm run test:stats-error-shape && npm run test:commit-flow && npm run test:dashboard-metrics && npm run test:dashboard-yesterday-coverage && npm run test:timezone-boundary && npm run test:routing-overview-quarantine && npm run test:review-filter-state"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
+    "next": "16.2.1",
+    "pdfjs-dist": "^4.10.38",
+    "pg": "^8.16.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tesseract.js": "^5.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+

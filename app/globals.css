@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+:root {
+  --indigo: #4f46e5;
+  --indigo-soft: #eef2ff;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}

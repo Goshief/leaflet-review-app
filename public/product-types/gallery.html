@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Product Types Gallery</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      h1 {
+        margin: 0 0 8px;
+      }
+      p {
+        margin: 0 0 16px;
+        color: #475569;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 12px;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 10px;
+      }
+      .img-wrap {
+        height: 120px;
+        border-radius: 8px;
+        background: #f1f5f9;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+      img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+      code {
+        display: block;
+        margin-top: 8px;
+        font-size: 12px;
+        color: #334155;
+      }
+      .missing {
+        color: #b91c1c;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>Galerie product-types</h1>
+      <p>Lokální obrázky bez externího fetch. Chybějící soubor je označen červeně.</p>
+      <section class="grid" id="grid"></section>
+    </main>
+
+    <script>
+      const keys = [
+        "butter",
+        "cheese",
+        "chocolate_bar",
+        "drink_can",
+        "cola_bottle",
+        "alcohol_bottle",
+        "cream",
+        "chicken_meat",
+        "beer",
+        "mandarins",
+        "grapes",
+        "placeholder",
+      ];
+
+      const grid = document.getElementById("grid");
+      keys.forEach((key) => {
+        const card = document.createElement("article");
+        card.className = "card";
+
+        const wrap = document.createElement("div");
+        wrap.className = "img-wrap";
+
+        const img = document.createElement("img");
+        img.src = `/product-types/${key}.png`;
+        img.alt = key;
+
+        const label = document.createElement("code");
+        label.textContent = `/product-types/${key}.png`;
+
+        img.onerror = () => {
+          card.classList.add("missing");
+          wrap.textContent = "Nenalezeno";
+        };
+
+        wrap.appendChild(img);
+        card.appendChild(wrap);
+        card.appendChild(label);
+        grid.appendChild(card);
+      });
+    </script>
+  </body>
+</html>

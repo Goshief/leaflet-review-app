@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Letáky — náhled toku (PDF → stránky → AI)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --indigo: #4f46e5;
+        --indigo-dark: #4338ca;
+        --indigo-soft: #eef2ff;
+        --slate-50: #f8fafc;
+        --slate-200: #e2e8f0;
+        --slate-500: #64748b;
+        --slate-800: #0f172a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, sans-serif;
+        color: var(--slate-800);
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2ff44 40%, #f8fafc 100%);
+        min-height: 100vh;
+      }
+      .topbar {
+        border-bottom: 1px solid var(--slate-200);
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(12px);
+        position: sticky;
+        top: 0;
+        z-index: 20;
+      }
+      .topbar-inner {
+        max-width: 80rem;
+        margin: 0 auto;
+        padding: 0.75rem 1.25rem;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+      .logo {
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--slate-800);
+      }
+      .logo span {
+        color: var(--indigo);
+      }
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+      }
+      .pills a {
+        padding: 0.45rem 0.95rem;
+        border-radius: 9999px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--slate-500);
+        text-decoration: none;
+      }
+      .pills a:hover {
+        background: #f1f5f9;
+      }
+      .pills a.on {
+        background: var(--indigo-soft);
+        color: var(--indigo);
+      }
+      .wrap {
+        max-width: 80rem;
+        margin: 0 auto;
+        padding: 1.5rem 1.25rem 3rem;
+        display: grid;
+        gap: 1.5rem;
+      }
+      @media (min-width: 1024px) {
+        .wrap {
+          grid-template-columns: 15rem 1fr;
+        }
+      }
+      .side {
+        border-radius: 1.25rem;
+        border: 1px solid var(--slate-200);
+        background: #fff;
+        padding: 1.25rem;
+        box-shadow: 0 4px 24px rgba(79, 70, 229, 0.06);
+        align-self: start;
+      }
+      .side h3 {
+        margin: 0 0 1rem;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #94a3b8;
+      }
+      .side a {
+        display: block;
+        padding: 0.55rem 0.85rem;
+        border-radius: 0.75rem;
+        font-size: 0.85rem;
+        color: var(--slate-500);
+        text-decoration: none;
+        margin-bottom: 0.25rem;
+      }
+      .side a:hover {
+        background: #f8fafc;
+      }
+      .side a.on {
+        background: var(--indigo-soft);
+        color: var(--indigo);
+        font-weight: 600;
+      }
+      .flow-banner {
+        grid-column: 1 / -1;
+        border-radius: 1rem;
+        background: linear-gradient(135deg, var(--indigo) 0%, var(--indigo-dark) 100%);
+        color: #fff;
+        padding: 1rem 1.25rem;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        box-shadow: 0 10px 40px rgba(79, 70, 229, 0.25);
+      }
+      .flow-banner strong {
+        font-weight: 600;
+      }
+      .content h1 {
+        margin: 0 0 0.35rem;
+        font-size: 1.35rem;
+        font-weight: 700;
+      }
+      .meta {
+        font-size: 0.85rem;
+        color: var(--slate-500);
+        margin-bottom: 1rem;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1.25rem;
+      }
+      .chip {
+        font-size: 0.75rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        background: #fff;
+        border: 1px solid var(--slate-200);
+        color: var(--slate-800);
+      }
+      .chip em {
+        font-style: normal;
+        font-weight: 600;
+        color: var(--indigo);
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+      }
+      @media (min-width: 640px) {
+        .stats {
+          grid-template-columns: repeat(4, 1fr);
+        }
+      }
+      .stat {
+        background: #fff;
+        border: 1px solid var(--slate-200);
+        border-radius: 1rem;
+        padding: 1rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+      }
+      .stat .n {
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: var(--indigo);
+      }
+      .stat .l {
+        font-size: 0.65rem;
+        color: var(--slate-500);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-top: 0.25rem;
+      }
+      .page-strip {
+        display: flex;
+        gap: 0.4rem;
+        overflow-x: auto;
+        padding: 0.5rem 0 1rem;
+        margin-bottom: 0.5rem;
+      }
+      .page-strip button {
+        flex: 0 0 auto;
+        width: 3rem;
+        height: 3.6rem;
+        border-radius: 0.5rem;
+        border: 2px solid var(--slate-200);
+        background: #f1f5f9;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: default;
+        color: var(--slate-500);
+      }
+      .page-strip button.cur {
+        border-color: var(--indigo);
+        background: var(--indigo-soft);
+        color: var(--indigo);
+      }
+      .grid {
+        display: grid;
+        gap: 1.25rem;
+      }
+      @media (min-width: 1024px) {
+        .grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .panel {
+        background: #fff;
+        border: 1px solid var(--slate-200);
+        border-radius: 1.25rem;
+        padding: 1.25rem;
+        box-shadow: 0 4px 24px rgba(15, 23, 42, 0.06);
+      }
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+        font-size: 0.75rem;
+        color: var(--slate-500);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .panel img.preview {
+        width: 100%;
+        border-radius: 0.75rem;
+        border: 1px solid var(--slate-200);
+      }
+      .extract {
+        background: linear-gradient(180deg, #f8fafc, #fff);
+        border: 1px solid var(--slate-200);
+        border-radius: 1.25rem;
+        padding: 1.25rem;
+        margin-bottom: 1.25rem;
+      }
+      .extract h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1rem;
+        font-weight: 700;
+      }
+      .extract p {
+        margin: 0 0 1rem;
+        font-size: 0.85rem;
+        color: var(--slate-500);
+        line-height: 1.55;
+      }
+      .extract .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        align-items: flex-end;
+      }
+      .extract label {
+        font-size: 0.7rem;
+        color: var(--slate-500);
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+      .extract input {
+        width: 4rem;
+        padding: 0.45rem 0.5rem;
+        border: 1px solid var(--slate-200);
+        border-radius: 0.5rem;
+        font-weight: 600;
+      }
+      .btn {
+        padding: 0.55rem 1.1rem;
+        border-radius: 0.65rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        border: none;
+        cursor: default;
+        background: var(--indigo);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+      }
+      .linkish {
+        font-size: 0.85rem;
+        color: var(--indigo);
+        font-weight: 500;
+        text-decoration: underline;
+        background: none;
+        border: none;
+      }
+      .hint-ok {
+        margin-top: 0.75rem;
+        font-size: 0.8rem;
+        color: #15803d;
+        font-weight: 500;
+      }
+      .out-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+      }
+      .out-table th {
+        text-align: left;
+        padding: 0.5rem 0.4rem;
+        color: var(--slate-500);
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--slate-200);
+      }
+      .out-table td {
+        padding: 0.55rem 0.4rem;
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .out-table img {
+        width: 36px;
+        height: 36px;
+        border-radius: 0.35rem;
+        vertical-align: middle;
+      }
+      footer {
+        grid-column: 1 / -1;
+        text-align: center;
+        font-size: 0.7rem;
+        color: #94a3b8;
+        padding: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="logo">Letáky <span>Admin</span></div>
+        <nav class="pills">
+          <a href="/">Přehled</a>
+          <a href="/upload">Nahrát PDF/obrázek</a>
+          <a class="on" href="/review">Kontrola</a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <aside class="side">
+        <h3>Menu</h3>
+        <a href="/">Letáky</a>
+        <a class="on" href="#">Ke kontrole</a>
+        <a href="#" style="color: #cbd5e1; pointer-events: none">Importováno</a>
+      </aside>
+
+      <div class="content">
+        <div class="flow-banner">
+          <strong>Tok:</strong> nahráš <strong>PDF</strong> (celý leták) → aplikace
+          <strong>vykreslí stránku po stránce</strong> jako obrázek →
+          <strong>OpenAI vision</strong> vrátí JSON dle Lidl parseru →
+          <strong>ty kontroluješ</strong> řádky před uložením do DB.
+        </div>
+
+        <h1>Kontrola letáku</h1>
+        <p class="meta">ukázka rozložení — skutečná aplikace v Next.js</p>
+
+        <div class="chips">
+          <span class="chip">Soubor: <em>lidl-tyden.pdf</em></span>
+          <span class="chip">PDF: <em>24 stran</em></span>
+          <span class="chip">Obchod: <em>Lidl CZ</em></span>
+          <span class="chip">Aktuální: <em>stránka 5 / 24</em></span>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="n">24</div>
+            <div class="l">Stran v PDF</div>
+          </div>
+          <div class="stat">
+            <div class="n">18</div>
+            <div class="l">Řádků načteno</div>
+          </div>
+          <div class="stat">
+            <div class="n">—</div>
+            <div class="l">Schváleno</div>
+          </div>
+          <div class="stat">
+            <div class="n">5</div>
+            <div class="l">Aktuální str.</div>
+          </div>
+        </div>
+
+        <p style="font-size: 0.8rem; color: var(--slate-500); margin: 0 0 0.5rem">
+          Rychlý výběr stránky (mock)
+        </p>
+        <div class="page-strip">
+          <button type="button">1</button>
+          <button type="button">2</button>
+          <button type="button">3</button>
+          <button type="button">4</button>
+          <button type="button" class="cur">5</button>
+          <button type="button">6</button>
+          <button type="button">…</button>
+          <button type="button">24</button>
+        </div>
+
+        <div class="grid">
+          <div class="panel">
+            <div class="panel-head">
+              <span>Náhled stránky (vykresleno z PDF)</span>
+              <span style="color: var(--indigo)">AI vidí totéž</span>
+            </div>
+            <img
+              class="preview"
+              src="./mockup/page-leaflet.svg"
+              alt="Náhled strany letáku"
+            />
+          </div>
+
+          <div>
+            <div class="extract">
+              <h2>Extrakce (Lidl CZ) — stránka 5 / 24</h2>
+              <p>
+                Tato stránka se převede na PNG a pošle do modelu striktního
+                parseru. Výsledek se validuje a zobrazí pod tímto blokem; pak
+                můžeš přejít na stránku 6 a opakovat.
+              </p>
+              <div class="row">
+                <div>
+                  <label>Číslo stránky (metadata v JSON)</label>
+                  <input type="text" value="5" readonly />
+                </div>
+                <button type="button" class="btn">Extrahovat tuto stránku</button>
+                <button type="button" class="linkish">Další stránka →</button>
+              </div>
+              <p class="hint-ok">
+                V produkční aplikaci funguje stejný postup s tvým PDF — bez ručního
+                exportu PNG.
+              </p>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">Řádky (staging) — výstup pro str. 5</div>
+              <table class="out-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>extracted_name</th>
+                    <th>price_total</th>
+                    <th>pack</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><img src="./mockup/thumb-1.svg" alt="" /></td>
+                    <td>Jogurt bílý 150 g</td>
+                    <td>19,90</td>
+                    <td>1×150 g</td>
+                  </tr>
+                  <tr>
+                    <td><img src="./mockup/thumb-2.svg" alt="" /></td>
+                    <td>Džus pomeranč 1 l</td>
+                    <td>24,90</td>
+                    <td>1×1 l</td>
+                  </tr>
+                  <tr>
+                    <td><img src="./mockup/thumb-3.svg" alt="" /></td>
+                    <td>Salát balený</td>
+                    <td>null</td>
+                    <td>—</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p style="font-size: 0.75rem; color: var(--slate-500); margin: 1rem 0 0">
+                Sloupce odpovídají schématu <code style="background:#f1f5f9;padding:0.1rem 0.35rem;border-radius:0.25rem">LidlPageOffer</code> /
+                <code style="background:#f1f5f9;padding:0.1rem 0.35rem;border-radius:0.25rem">offers_staging</code>.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer>
+        Statický náhled <code>public/mockup.html</code> · živá kontrola:
+        <code>npm run dev</code> → <strong>/review</strong> s nahraným PDF.
+      </footer>
+    </div>
+  </body>
+</html>
