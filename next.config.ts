@@ -2,6 +2,30 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
+  /**
+   * Starý `public/product-types/gallery.html` jinak vyhrává nad App Routerem.
+   * Rewrite běží před filesystemem — `/product-types/gallery.html` vždy obslouží stejnou stránku jako `/product-types/gallery`.
+   */
+  async rewrites() {
+    return [
+      {
+        source: "/product-types/gallery.html",
+        destination: "/product-types/gallery",
+      },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: "/product-types/gallery",
+        headers: [{ key: "Cache-Control", value: "no-store, max-age=0, must-revalidate" }],
+      },
+      {
+        source: "/product-types/gallery.html",
+        headers: [{ key: "Cache-Control", value: "no-store, max-age=0, must-revalidate" }],
+      },
+    ];
+  },
   // Prevent Next/Turbopack from inferring a parent workspace root on machines
   // where multiple lockfiles exist above this app.
   turbopack: {
