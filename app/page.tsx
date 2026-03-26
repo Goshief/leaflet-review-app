@@ -2,7 +2,7 @@ import { HomeDashboard } from "@/components/dashboard/home-dashboard";
 import { LocalDashboard } from "@/components/dashboard/local-dashboard";
 import { getDashboardData } from "@/lib/dashboard/get-dashboard";
 
-/** Dashboard se počítá v getDashboardData (unstable_cache); route může být cachovaná. */
+/** ISR: přehled se může obnovit až po intervalu (server stále počítá z DB při generování). */
 export const revalidate = 30;
 
 export default async function Home() {

@@ -18,7 +18,7 @@ export function getSupabaseAdmin(): SupabaseClient | null {
   });
 
   if (!url || !key) {
-    throw new Error("SUPABASE_ENV_MISSING");
+    return null;
   }
 
   try {

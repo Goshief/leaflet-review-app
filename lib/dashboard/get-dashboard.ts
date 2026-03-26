@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   buildTrendFromDayKeys,
@@ -140,11 +139,41 @@ function isoUtcDaysAgo(days: number): string {
   return d.toISOString();
 }
 
-/** Jak dlouho držet výsledek dashboardu v Next Data Cache (sekundy). */
-const DASHBOARD_REVALIDATE_SEC = Math.min(
-  120,
-  Math.max(10, Number(process.env.DASHBOARD_CACHE_SECONDS ?? 25) || 25)
-);
+type AdminClient = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
+
+/**
+ * Různé nasazení mají jiné sloupce v `offers_quarantine` (např. chybí created_at).
+ * Zkusíme rychlý filtrovaný dotaz, pak úplný minimální select jako u load-ported-items.
+ */
+async function loadQuarantineDashboardRows(supabase: AdminClient, windowStartIso: string) {
+  const attempts = [
+    () =>
+      supabase
+        .from("offers_quarantine")
+        .select("id,import_id,store_id,source_type,quarantine_reason,reviewed_at,created_at")
+        .or(`reviewed_at.gte."${windowStartIso}",created_at.gte."${windowStartIso}"`)
+        .limit(25000),
+    () =>
+      supabase
+        .from("offers_quarantine")
+        .select("id,import_id,store_id,source_type,quarantine_reason,reviewed_at,created_at")
+        .gte("created_at", windowStartIso)
+        .limit(25000),
+    () =>
+      supabase
+        .from("offers_quarantine")
+        .select("id,import_id,store_id,source_type,quarantine_reason")
+        .limit(5000),
+  ];
+
+  let last: Awaited<ReturnType<(typeof attempts)[number]>> | null = null;
+  for (const run of attempts) {
+    const res = await run();
+    last = res;
+    if (!res.error) return res;
+  }
+  return last!;
+}
 
 function computeApprovalRatePct(inserted: number, approved: number): number | null {
   if (!inserted) return null;
@@ -297,11 +326,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     return mkDemo();
   }
 
-  return unstable_cache(
-    async () => computeDashboardData(supabase),
-    ["dashboard-data-v2"],
-    { revalidate: DASHBOARD_REVALIDATE_SEC }
-  )();
+  return computeDashboardData(supabase);
 }
 
 async function computeDashboardData(
@@ -324,7 +349,7 @@ async function computeDashboardData(
   /** Ořez řádků v DB — dříve 3× 5000 bez filtru = pomalý přenos a CPU. */
   const windowStartIso = isoUtcDaysAgo(45);
 
-  const [importsRes, rawRes, quarantineResInitial] = await Promise.all([
+  const [importsRes, rawRes] = await Promise.all([
     supabase
       .from("imports")
       .select("id, source_type, source_url, note, created_at, batch_no")
@@ -337,20 +362,9 @@ async function computeDashboardData(
       .gte("created_at", windowStartIso)
       .order("created_at", { ascending: false })
       .limit(25000),
-    supabase
-      .from("offers_quarantine")
-      .select("id,import_id,store_id,source_type,quarantine_reason,reviewed_at,created_at")
-      .or(`reviewed_at.gte."${windowStartIso}",created_at.gte."${windowStartIso}"`)
-      .limit(25000),
   ]);
 
-  const quarantineRes = quarantineResInitial.error
-    ? await supabase
-        .from("offers_quarantine")
-        .select("id,import_id,store_id,source_type,quarantine_reason,created_at")
-        .gte("created_at", windowStartIso)
-        .limit(25000)
-    : quarantineResInitial;
+  const quarantineRes = await loadQuarantineDashboardRows(supabase, windowStartIso);
 
   if (verbose) {
     console.info(
