@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "test:safe-error-contract": "node scripts/test-safe-error-contract.mts",
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

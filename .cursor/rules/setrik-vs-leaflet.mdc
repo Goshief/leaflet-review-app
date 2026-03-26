@@ -1,0 +1,11 @@
+---
+description: Šetřík (root) vs Letáky Admin — oddělené aplikace, porty, neplést
+alwaysApply: true
+---
+
+# Šetřík a Letáky Admin — nesplácat
+
+- **Šetřík** — nadřazený monorepo `setrik/` (nad tímto adresářem). Lokálně **:3000**.
+- **Tento repo (Letáky Admin / leaflet-review-app)** — lokálně `npm run dev` → **http://localhost:3001**. Produkce = vlastní deploy URL.
+
+Neříkat uživateli, že „localhost“ = Šetřík, když pracuje v tomto projektu — tady je Letáky Admin na **3001**.
