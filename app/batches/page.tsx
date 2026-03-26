@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listImportBatches } from "@/lib/data/import-batches";
 import { BatchesClient } from "@/components/batches/batches-client";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { loadPortedItemsAggregated } from "@/lib/batches/load-ported-items";
 import { BatchItemsTableEditor, type BatchCommittedItem } from "@/components/batches/batch-items-table-editor";
 
 export const dynamic = "force-dynamic";
@@ -11,34 +12,32 @@ type AggregatedItemRow = BatchCommittedItem;
 export default async function BatchesPage() {
   const result = await listImportBatches();
   let aggregatedItems: AggregatedItemRow[] = [];
+  let aggregatedLoadError: string | null = null;
 
   if (result.ok && result.batches.length > 0) {
     const supabase = getSupabaseAdmin();
     const batchIds = result.batches.map((b) => b.id);
     if (supabase && batchIds.length > 0) {
-      const [raw, quarantine] = await Promise.all([
-        supabase
-          .from("offers_raw")
-          .select(
-            "id, import_id, extracted_name, price_total, currency, pack_qty, pack_unit, pack_unit_qty, price_standard, typical_price_per_unit, price_with_loyalty_card, has_loyalty_card_price, notes, brand, category, valid_from, valid_to, created_at, suggested_image_key, approved_image_key, image_review_status"
-          )
-          .in("import_id", batchIds)
-          .order("import_id", { ascending: false })
-          .limit(5000),
-        supabase
-          .from("offers_quarantine")
-          .select(
-            "id, import_id, extracted_name, price_total, currency, pack_qty, pack_unit, pack_unit_qty, price_standard, typical_price_per_unit, price_with_loyalty_card, has_loyalty_card_price, notes, brand, category, valid_from, valid_to, created_at, suggested_image_key, approved_image_key, image_review_status"
-          )
-          .in("import_id", batchIds)
-          .order("import_id", { ascending: false })
-          .limit(5000),
-      ]);
-      const rawItems = ((raw.data ?? []) as Omit<AggregatedItemRow, "source_table">[]).map((row) => ({
+      const { raw, quarantine, rawError, quarantineError } = await loadPortedItemsAggregated<
+        Omit<AggregatedItemRow, "source_table">
+      >({
+        supabase,
+        importIds: batchIds,
+      });
+
+      const errParts: string[] = [];
+      if (rawError) errParts.push(`offers_raw: ${rawError}`);
+      if (quarantineError) errParts.push(`offers_quarantine: ${quarantineError}`);
+      aggregatedLoadError = errParts.length ? errParts.join(" | ") : null;
+      if (aggregatedLoadError) {
+        console.error("[batches] aggregated items query failed", { error: aggregatedLoadError });
+      }
+
+      const rawItems = (raw as Omit<AggregatedItemRow, "source_table">[]).map((row) => ({
         ...row,
         source_table: "offers_raw" as const,
       }));
-      const quarantineItems = ((quarantine.data ?? []) as Omit<AggregatedItemRow, "source_table">[]).map((row) => ({
+      const quarantineItems = (quarantine as Omit<AggregatedItemRow, "source_table">[]).map((row) => ({
         ...row,
         source_table: "offers_quarantine" as const,
       }));
@@ -117,6 +116,12 @@ export default async function BatchesPage() {
                 Jeden velký seznam bez proklikávání dávkami ({aggregatedItems.length} položek). Upravovat můžeš rovnou zde.
               </p>
             </div>
+            {aggregatedLoadError ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+                <p className="font-semibold">Načtení portovaných položek selhalo</p>
+                <p className="mt-1 font-mono text-[12px] whitespace-pre-wrap">{aggregatedLoadError}</p>
+              </div>
+            ) : null}
             {aggregatedItems.length === 0 ? (
               <p className="text-sm text-slate-500">Zatím nejsou dostupné žádné portované položky.</p>
             ) : (

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { ImportRow } from "@/lib/data/import-batches";
+import { loadPortedItemsForImport } from "@/lib/batches/load-ported-items";
 import { RememberLastBatch } from "@/components/batches/remember-last-batch";
 import { BatchItemsTableEditor, type BatchCommittedItem } from "@/components/batches/batch-items-table-editor";
 
@@ -62,33 +63,23 @@ export default async function BatchDetailPage({ params }: Props) {
 
   const b = data as ImportRow;
 
-  const [raw, quarantine] = await Promise.all([
-    supabase
-      .from("offers_raw")
-      .select(
-        "id, import_id, extracted_name, price_total, currency, pack_qty, pack_unit, pack_unit_qty, price_standard, typical_price_per_unit, price_with_loyalty_card, has_loyalty_card_price, notes, brand, category, valid_from, valid_to, created_at, suggested_image_key, approved_image_key, image_review_status",
-        { count: "exact" }
-      )
-      .eq("import_id", id)
-      .order("created_at", { ascending: false })
-      .limit(4000),
-    supabase
-      .from("offers_quarantine")
-      .select(
-        "id, import_id, extracted_name, price_total, currency, pack_qty, pack_unit, pack_unit_qty, price_standard, typical_price_per_unit, price_with_loyalty_card, has_loyalty_card_price, notes, brand, category, valid_from, valid_to, created_at, suggested_image_key, approved_image_key, image_review_status",
-        { count: "exact" }
-      )
-      .eq("import_id", id)
-      .order("created_at", { ascending: false })
-      .limit(4000),
-  ]);
-  const rawCount = raw.count ?? 0;
-  const qCount = quarantine.count ?? 0;
-  const rawItems: BatchCommittedItemWithSource[] = ((raw.data ?? []) as BatchItemRow[]).map((row) => ({
+  const {
+    raw: rawRows,
+    quarantine: quarantineRows,
+    rawCount,
+    quarantineCount: qCount,
+    loadError: detailLoadError,
+  } = await loadPortedItemsForImport<BatchItemRow>({ supabase, importId: id });
+
+  if (detailLoadError) {
+    console.error("[batches] detail items query failed", { import_id: id, error: detailLoadError });
+  }
+
+  const rawItems: BatchCommittedItemWithSource[] = rawRows.map((row) => ({
     ...row,
     source_table: "offers_raw",
   }));
-  const quarantineItems: BatchCommittedItemWithSource[] = ((quarantine.data ?? []) as BatchItemRow[]).map((row) => ({
+  const quarantineItems: BatchCommittedItemWithSource[] = quarantineRows.map((row) => ({
     ...row,
     source_table: "offers_quarantine",
   }));
@@ -152,6 +143,13 @@ export default async function BatchDetailPage({ params }: Props) {
           </p>
         ) : null}
       </div>
+
+      {detailLoadError ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+          <p className="font-semibold">Načtení položek importu selhalo</p>
+          <p className="mt-1 font-mono text-[12px] whitespace-pre-wrap">{detailLoadError}</p>
+        </div>
+      ) : null}
 
       <p className="text-sm text-slate-600">
         Detail importu z tabulky <code className="text-slate-800">imports</code>.

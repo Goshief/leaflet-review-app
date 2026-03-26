@@ -30,15 +30,16 @@ type UpdateResult = {
   error: { message?: string } | null;
 };
 
-type TableQuery = {
-  update(payload: Record<string, unknown>): TableQuery;
-  eq(column: string, value: string): TableQuery;
-  select(columns: string): TableQuery;
-  maybeSingle(): PromiseLike<UpdateResult>;
-};
-
 export type SupabaseUpdateClient = {
-  from(table: string): TableQuery;
+  /**
+   * Structural typing wrapper around `@supabase/supabase-js` query builders.
+   * Keep it permissive so App Routes can pass a real `SupabaseClient` without
+   * fighting Postgrest builder generics during Next.js type-checking.
+   */
+  from(table: string): {
+    select(columns: string): any;
+    update(payload: Record<string, unknown>): any;
+  };
 };
 
 type ExistingImageKeyRow = {

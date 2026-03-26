@@ -59,28 +59,11 @@ type RequestRow = {
   updated_at?: string;
 };
 
-type QueryBuilder<T> = {
-  eq(column: string, value: string): QueryBuilder<T>;
-  order(column: string, options: { ascending: boolean }): QueryBuilder<T>;
-  limit(value: number): QueryBuilder<T>;
-  maybeSingle(): PromiseLike<QueryResult<T>>;
-  then<TResult1 = QueryResult<T>, TResult2 = never>(
-    onfulfilled?: ((value: QueryResult<T>) => TResult1 | PromiseLike<TResult1>) | null,
-    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
-  ): PromiseLike<TResult1 | TResult2>;
-};
-
-type InsertBuilder<T> = {
-  select(columns: string): { maybeSingle(): PromiseLike<InsertResult<T>> };
-};
-
 export type SupabaseGenerationRequestClient = {
   from(table: string): {
-    select(columns: string): QueryBuilder<RequestRow>;
-    insert(payload: Record<string, unknown>): InsertBuilder<RequestRow>;
-    update(payload: Record<string, unknown>): {
-      eq(column: string, value: string): QueryBuilder<RequestRow>;
-    };
+    select(columns: string): any;
+    insert(payload: Record<string, unknown>): any;
+    update(payload: Record<string, unknown>): any;
   };
 };
 
