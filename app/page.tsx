@@ -2,8 +2,8 @@ import { HomeDashboard } from "@/components/dashboard/home-dashboard";
 import { LocalDashboard } from "@/components/dashboard/local-dashboard";
 import { getDashboardData } from "@/lib/dashboard/get-dashboard";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+/** Dashboard se počítá v getDashboardData (unstable_cache); route může být cachovaná. */
+export const revalidate = 30;
 
 export default async function Home() {
   const d = await getDashboardData();

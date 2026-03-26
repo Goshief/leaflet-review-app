@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   buildTrendFromDayKeys,
@@ -131,6 +132,19 @@ function isTruthy(v: string | undefined): boolean {
   const x = (v ?? "").trim().toLowerCase();
   return x === "1" || x === "true" || x === "yes" || x === "on";
 }
+
+/** ISO timestamp pro filtr řádků v DB (trend max 30 dní + rezerva). */
+function isoUtcDaysAgo(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString();
+}
+
+/** Jak dlouho držet výsledek dashboardu v Next Data Cache (sekundy). */
+const DASHBOARD_REVALIDATE_SEC = Math.min(
+  120,
+  Math.max(10, Number(process.env.DASHBOARD_CACHE_SECONDS ?? 25) || 25)
+);
 
 function computeApprovalRatePct(inserted: number, approved: number): number | null {
   if (!inserted) return null;
@@ -282,10 +296,24 @@ export async function getDashboardData(): Promise<DashboardData> {
     });
     return mkDemo();
   }
-  console.info("[dashboard] configured:true", {
-    has_url: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-    has_service_role_key: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-  });
+
+  return unstable_cache(
+    async () => computeDashboardData(supabase),
+    ["dashboard-data-v2"],
+    { revalidate: DASHBOARD_REVALIDATE_SEC }
+  )();
+}
+
+async function computeDashboardData(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>
+): Promise<DashboardData> {
+  const verbose = isTruthy(process.env.DASHBOARD_DEBUG_METRICS);
+  if (verbose) {
+    console.info("[dashboard] configured:true", {
+      has_url: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+      has_service_role_key: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    });
+  }
 
   const now = new Date();
   const dayKeys30Arr = recentDayKeysInTz(30, now.toISOString(), DASHBOARD_TZ);
@@ -293,28 +321,44 @@ export async function getDashboardData(): Promise<DashboardData> {
   const dayKeys30 = new Set(dayKeys30Arr);
   const todayKey = dayKeys30Arr[dayKeys30Arr.length - 1] ?? (dayKeyInTz(now.toISOString()) ?? yyyyMmDd(now));
 
-  const [importsRes, rawRes, quarantineRes] = await Promise.all([
+  /** Ořez řádků v DB — dříve 3× 5000 bez filtru = pomalý přenos a CPU. */
+  const windowStartIso = isoUtcDaysAgo(45);
+
+  const [importsRes, rawRes, quarantineResInitial] = await Promise.all([
     supabase
       .from("imports")
       .select("id, source_type, source_url, note, created_at, batch_no")
+      .gte("created_at", windowStartIso)
       .order("created_at", { ascending: false })
-      .limit(5000),
+      .limit(4000),
     supabase
       .from("offers_raw")
       .select("id,import_id,store_id,source_type,created_at")
-      .limit(5000),
+      .gte("created_at", windowStartIso)
+      .order("created_at", { ascending: false })
+      .limit(25000),
     supabase
       .from("offers_quarantine")
-      .select("id,import_id,store_id,source_type,quarantine_reason")
-      .limit(5000),
+      .select("id,import_id,store_id,source_type,quarantine_reason,reviewed_at,created_at")
+      .or(`reviewed_at.gte."${windowStartIso}",created_at.gte."${windowStartIso}"`)
+      .limit(25000),
   ]);
-  console.info("[dashboard] query columns fixed");
 
-  console.info(
-    `[dashboard] imports_count=${importsRes.data?.length ?? 0} raw_count=${
-      rawRes.data?.length ?? 0
-    } quarantine_count=${quarantineRes.data?.length ?? 0}`
-  );
+  const quarantineRes = quarantineResInitial.error
+    ? await supabase
+        .from("offers_quarantine")
+        .select("id,import_id,store_id,source_type,quarantine_reason,created_at")
+        .gte("created_at", windowStartIso)
+        .limit(25000)
+    : quarantineResInitial;
+
+  if (verbose) {
+    console.info(
+      `[dashboard] imports_count=${importsRes.data?.length ?? 0} raw_count=${
+        rawRes.data?.length ?? 0
+      } quarantine_count=${quarantineRes.data?.length ?? 0}`
+    );
+  }
 
   if (importsRes.error || rawRes.error || quarantineRes.error) {
     console.error("[dashboard] configured:false reason=query_failed", {
@@ -383,6 +427,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     const parentImportTs = importId ? importCreatedAtById.get(importId) ?? null : null;
     const eventTs = resolveMetricTimestamp(
       q.reviewed_at ? String(q.reviewed_at) : null,
+      q.created_at ? String(q.created_at) : null,
       parentImportTs
     );
     if (!eventTs) {
@@ -406,19 +451,21 @@ export async function getDashboardData(): Promise<DashboardData> {
   const dayKeys7 = new Set(dayKeys7Arr);
   const events7d = events.filter((e) => dayKeys7.has(e.day_key)).length;
   const events30d = events.length;
-  console.info(`[dashboard] raw_loaded_before_window=${rawLoadedBeforeWindow}`);
-  console.info(`[dashboard] raw_with_resolved_timestamp=${rawWithResolvedTimestamp}`);
-  console.info(`[dashboard] raw_in_30d_window=${rawIn30dWindow}`);
-  console.info(`[dashboard] quarantine_loaded_before_window=${quarantineLoadedBeforeWindow}`);
-  console.info(`[dashboard] quarantine_in_30d_window=${quarantineIn30dWindow}`);
-  console.info(`[dashboard] raw_missing_timestamp_after_fallback=${skippedRawMissingTimestamp}`);
-  console.info(`[dashboard] events_created=${events.length}`);
-  console.info(`[dashboard] skipped_raw_missing_timestamp=${skippedRawMissingTimestamp}`);
-  console.info(
-    `[dashboard] skipped_quarantine_missing_timestamp=${skippedQuarantineMissingTimestamp}`
-  );
-  console.info(`[dashboard] trend_7d_events=${events7d}`);
-  console.info(`[dashboard] trend_30d_events=${events30d}`);
+  if (verbose) {
+    console.info(`[dashboard] raw_loaded_before_window=${rawLoadedBeforeWindow}`);
+    console.info(`[dashboard] raw_with_resolved_timestamp=${rawWithResolvedTimestamp}`);
+    console.info(`[dashboard] raw_in_30d_window=${rawIn30dWindow}`);
+    console.info(`[dashboard] quarantine_loaded_before_window=${quarantineLoadedBeforeWindow}`);
+    console.info(`[dashboard] quarantine_in_30d_window=${quarantineIn30dWindow}`);
+    console.info(`[dashboard] raw_missing_timestamp_after_fallback=${skippedRawMissingTimestamp}`);
+    console.info(`[dashboard] events_created=${events.length}`);
+    console.info(`[dashboard] skipped_raw_missing_timestamp=${skippedRawMissingTimestamp}`);
+    console.info(
+      `[dashboard] skipped_quarantine_missing_timestamp=${skippedQuarantineMissingTimestamp}`
+    );
+    console.info(`[dashboard] trend_7d_events=${events7d}`);
+    console.info(`[dashboard] trend_30d_events=${events30d}`);
+  }
 
   const todayEvents = events.filter((e) => e.day_key === todayKey);
   const today: DashboardKpis = {
@@ -475,9 +522,11 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const trend_7d: DashboardTrendPoint[] = buildTrendFromDayKeys(dayKeys7Arr, events);
   const trend_30d: DashboardTrendPoint[] = buildTrendFromDayKeys(dayKeys30Arr, events);
-  console.info(`[dashboard] today=${JSON.stringify(today)}`);
-  console.info(`[dashboard] trend_7d=${JSON.stringify(trend_7d)}`);
-  console.info(`[dashboard] trend_30d=${JSON.stringify(trend_30d)}`);
+  if (verbose) {
+    console.info(`[dashboard] today=${JSON.stringify(today)}`);
+    console.info(`[dashboard] trend_7d=${JSON.stringify(trend_7d)}`);
+    console.info(`[dashboard] trend_30d=${JSON.stringify(trend_30d)}`);
+  }
 
   const insertedRows = events.map((e) => ({
     retailer: e.retailer,
