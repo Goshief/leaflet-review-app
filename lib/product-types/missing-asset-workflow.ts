@@ -1,6 +1,6 @@
 import type { BatchItemImageState } from "./resolve-batch-item-image-state.ts";
 
-export const MISSING_ASSET_TITLE = "Chybí obrázek v úložišti";
+export const MISSING_ASSET_TITLE = "Chybí přiřazený image key";
 
 export type MissingAssetWorkflowState = {
   showMissingAssetCta: boolean;

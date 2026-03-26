@@ -23,26 +23,3 @@ export function getProductTypeImageUrl(imageKey?: string | null) {
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
-
-export async function uploadProductTypeImage(file: File) {
-  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-  const base = file.name
-    .replace(/\.[^/.]+$/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9-_]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  const fileName = `${base || "image"}.${ext}`;
-
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(fileName, file, {
-      upsert: true,
-      contentType: file.type || undefined,
-    });
-
-  if (error) throw error;
-
-  return fileName;
-}

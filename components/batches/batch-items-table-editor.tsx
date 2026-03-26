@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { getProductTypeImageUrl, uploadProductTypeImage } from "@/lib/product-types";
+import { getProductTypeImageUrl } from "@/lib/product-types";
 import { getAvailableImageKeys } from "@/lib/product-types/image-keys";
 import { buildImageReviewPatch } from "@/lib/product-types/image-review-actions";
 import { getMissingAssetWorkflowState } from "@/lib/product-types/missing-asset-workflow";
@@ -300,57 +300,6 @@ export function BatchItemsTableEditor({ items }: Props) {
     }
   };
 
-  const onUploadProductTypeImageForRow = (item: BatchCommittedItem, file: File) => {
-    const rowKey = rowKeyOf(item);
-    void (async () => {
-      setError(null);
-      setSuccess(null);
-      setReviewSavingKey(rowKey);
-      try {
-        const imageKey = await uploadProductTypeImage(file);
-        const res = await fetch("/api/batches/item", {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            id: item.id,
-            import_id: item.import_id,
-            source_table: item.source_table,
-            patch: {
-              approved_image_key: imageKey,
-              image_review_status: "manual_override",
-            },
-          }),
-        });
-        const json = (await res.json()) as {
-          ok?: boolean;
-          error?: string;
-          message?: string;
-          item?: BatchCommittedItem;
-        };
-        if (!res.ok || !json?.ok) {
-          throw new Error(json?.error || json?.message || "Nahrání obrázku se nepodařilo uložit.");
-        }
-        if (json.item) {
-          setRows((prev) =>
-            prev.map((row) =>
-              row.id === json.item!.id &&
-              row.import_id === json.item!.import_id &&
-              row.source_table === json.item!.source_table
-                ? json.item!
-                : row
-            )
-          );
-        }
-        setSuccess("Obrázek byl nahrán do úložiště a uložen jako image key.");
-        router.refresh();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Nahrání obrázku selhalo.");
-      } finally {
-        setReviewSavingKey(null);
-      }
-    })();
-  };
-
   const onRequestImageGeneration = (item: BatchCommittedItem) => {
     const rowKey = rowKeyOf(item);
     void (async () => {
@@ -451,6 +400,11 @@ export function BatchItemsTableEditor({ items }: Props) {
             <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
               <p className="text-sm font-semibold text-amber-900">{missingAssetState.title}</p>
               <p className="mt-1 text-xs text-amber-900/90">{missingAssetState.message}</p>
+              <p className="mt-2 text-xs text-amber-900/90">
+                Níže v sekci „Image review akce“ vyber katalogový image key a klikni na{" "}
+                <strong>Manual override</strong> — hodnota se uloží do databáze (pole{" "}
+                <code className="rounded bg-amber-100/80 px-1">approved_image_key</code>).
+              </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -459,19 +413,6 @@ export function BatchItemsTableEditor({ items }: Props) {
                 >
                   Generuj obrázek
                 </button>
-                <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = "";
-                      if (file) onUploadProductTypeImageForRow(item, file);
-                    }}
-                  />
-                  Nahrát do úložiště
-                </label>
                 {missingAssetState.showGenerationRequested ? (
                   <span className="text-xs text-indigo-700">Požadavek na generování zaznamenán.</span>
                 ) : null}
@@ -603,6 +544,10 @@ export function BatchItemsTableEditor({ items }: Props) {
               <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
                 <p className="text-sm font-semibold text-amber-900">{editingMissingAssetState?.title}</p>
                 <p className="mt-1 text-sm text-amber-900">{editingMissingAssetState?.message}</p>
+                <p className="mt-2 text-xs text-amber-900/90">
+                  Po zavření modalu použij v řádku položky sekci „Image review akce“: vyber katalogový key a{" "}
+                  <strong>Manual override</strong>.
+                </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -611,19 +556,6 @@ export function BatchItemsTableEditor({ items }: Props) {
                   >
                     Generuj obrázek
                   </button>
-                  <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="sr-only"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (file && editing) onUploadProductTypeImageForRow(editing, file);
-                      }}
-                    />
-                    Nahrát do úložiště
-                  </label>
                   {editingMissingAssetState?.showGenerationRequested ? (
                     <span className="text-xs text-indigo-700">Požadavek na generování zaznamenán.</span>
                   ) : null}

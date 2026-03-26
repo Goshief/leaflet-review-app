@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getProductTypeImageUrl, uploadProductTypeImage } from "@/lib/product-types";
+import { getProductTypeImageUrl } from "@/lib/product-types";
 import { isValidImageKey } from "@/lib/product-types/image-keys";
 
 type RequestRow = {
@@ -189,31 +189,10 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                   onChange={(e) =>
                     setResolvedKeyById((prev) => ({ ...prev, [r.id]: e.target.value }))
                   }
-                  placeholder="final image key"
+                  placeholder="katalogový image key (např. butter)"
                   className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
+                  title="Musí odpovídat souboru v bucketu product-types"
                 />
-                <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = "";
-                      if (!file) return;
-                      void (async () => {
-                        setError(null);
-                        try {
-                          const key = await uploadProductTypeImage(file);
-                          setResolvedKeyById((prev) => ({ ...prev, [r.id]: key }));
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : "Nahrání souboru selhalo.");
-                        }
-                      })();
-                    }}
-                  />
-                  Nahrát soubor
-                </label>
                 {(resolvedKeyById[r.id] ?? r.resolved_image_key) ? (
                   <img
                     src={getProductTypeImageUrl(resolvedKeyById[r.id] ?? r.resolved_image_key)}

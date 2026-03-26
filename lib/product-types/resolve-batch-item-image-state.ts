@@ -1,7 +1,7 @@
 import { isValidImageKey } from "./image-keys.ts";
 
 export const IMAGE_MISSING_STATUS_MESSAGE =
-  "Produkt nemá obrázek v úložišti (Supabase bucket product-types). Nahraj soubor nebo zadej platný image key.";
+  "Produkt nemá platný image key. V sekci „Image review akce“ vyber katalogový key a ulož ho přes „Manual override“ (uloží se do databáze).";
 
 export type BatchItemImageLike = {
   approved_image_key?: string | null;
