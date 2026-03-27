@@ -59,7 +59,8 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
           status,
           resolvedImageKey: status === "done" ? (resolvedKeyById[row.id] ?? "").trim() || null : null,
           errorNote: status === "error" ? (errorNoteById[row.id] ?? "").trim() || null : null,
-          applyToBatchItem: status === "done" ? applyToBatchById[row.id] === true : false,
+          // Default: při "hotovo" propsat hned do batch itemu, pokud to operátor výslovně nevypne.
+          applyToBatchItem: status === "done" ? applyToBatchById[row.id] !== false : false,
         }),
       });
       const json = (await res.json()) as { ok?: boolean; error?: string; request?: RequestRow };
@@ -280,7 +281,7 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                   <label className="flex cursor-pointer items-center gap-1.5 pb-1 text-xs text-slate-600">
                     <input
                       type="checkbox"
-                      checked={applyToBatchById[r.id] === true}
+                      checked={applyToBatchById[r.id] !== false}
                       onChange={(e) =>
                         setApplyToBatchById((prev) => ({ ...prev, [r.id]: e.target.checked }))
                       }

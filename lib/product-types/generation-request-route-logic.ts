@@ -73,7 +73,7 @@ export const GENERATION_REQUEST_UPDATE_MISSING_MESSAGE =
   "Nepodařilo se uložit změnu stavu požadavku.";
 
 const VALID_TRANSITIONS: Record<GenerationRequestStatus, GenerationRequestStatus[]> = {
-  pending: ["processing", "error"],
+  pending: ["processing", "done", "error"],
   processing: ["done", "error"],
   done: ["done"],
   error: [],
