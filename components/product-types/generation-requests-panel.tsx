@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { getProductTypeImageUrl } from "@/lib/product-types";
-import { isValidImageKey } from "@/lib/product-types/image-keys";
+import { getProductTypeImageUrl, uploadProductTypeImage } from "@/lib/product-types";
+import { getAvailableImageKeys, isValidImageKey } from "@/lib/product-types/image-keys";
 
 type RequestRow = {
   id: string;
@@ -41,6 +41,7 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
   const [resolvedKeyById, setResolvedKeyById] = useState<Record<string, string>>({});
   const [errorNoteById, setErrorNoteById] = useState<Record<string, string>>({});
   const [applyToBatchById, setApplyToBatchById] = useState<Record<string, boolean>>({});
+  const imageKeys = getAvailableImageKeys();
 
   const onUpdate = async (
     row: RequestRow,
@@ -74,11 +75,26 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
     }
   };
 
+  const onUploadForRequest = async (row: RequestRow, file: File) => {
+    setError(null);
+    setSuccess(null);
+    setSavingId(row.id);
+    try {
+      const key = await uploadProductTypeImage(file);
+      setResolvedKeyById((prev) => ({ ...prev, [row.id]: key }));
+      setSuccess(`Soubor nahrán do úložiště jako ${key}. Pak klikni na „Uložit jako hotovo“.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Nahrání souboru selhalo.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_4px_24px_rgba(15,23,42,0.06)]">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Požadavky na obrázky</h1>
-        <p className="mt-1 text-sm text-slate-600">Operativní queue bez AI generace ({rows.length} položek).</p>
+        <p className="mt-1 text-sm text-slate-600">Operativní fronta bez AI generace ({rows.length} položek).</p>
       </div>
 
       {success ? (
@@ -89,16 +105,16 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
       ) : null}
 
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-500">Žádné generation requesty.</p>
+        <p className="text-sm text-slate-500">Žádné požadavky.</p>
       ) : (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs font-semibold text-slate-600">Filtr:</label>
             {([
-              ["all", "All"],
-              ["pending", "Pending only"],
-              ["processing", "Processing only"],
-              ["error", "Error only"],
+              ["all", "Vše"],
+              ["pending", "Jen čekající"],
+              ["processing", "Jen ve zpracování"],
+              ["error", "Jen chybové"],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -136,16 +152,16 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                     <div className="flex flex-wrap items-center gap-2">
                       {candidateMissing ? (
                         <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                          missing/unknown key
+                          chybí/neznámý key
                         </span>
                       ) : (
                         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-                          valid candidate key
+                          validní kandidát
                         </span>
                       )}
                       {pendingHighlight ? (
                         <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white">
-                          pending
+                          čeká
                         </span>
                       ) : null}
                     </div>
@@ -158,7 +174,7 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
 
               <dl className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <dt className="text-xs text-slate-500">candidateImageKey</dt>
+                  <dt className="text-xs text-slate-500">Kandidátní image key</dt>
                   <dd className="mt-1 flex flex-wrap items-center gap-2">
                     <span>{r.candidate_image_key ?? "—"}</span>
                     {r.candidate_image_key ? (
@@ -170,8 +186,8 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                     ) : null}
                   </dd>
                 </div>
-                <div><dt className="text-xs text-slate-500">status</dt><dd>{r.status}</dd></div>
-                <div><dt className="text-xs text-slate-500">createdAt</dt><dd>{fmt(r.created_at)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Stav</dt><dd>{r.status}</dd></div>
+                <div><dt className="text-xs text-slate-500">Vytvořeno</dt><dd>{fmt(r.created_at)}</dd></div>
               </dl>
 
               <div className="mt-3 space-y-2">
@@ -182,15 +198,15 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                     onClick={() => void onUpdate(r, "processing")}
                     className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800 disabled:opacity-50"
                   >
-                    Mark as processing
+                    Označit jako „ve zpracování“
                   </button>
                   <button
                     type="button"
-                    disabled={savingId === r.id || r.status !== "processing"}
+                    disabled={savingId === r.id || r.status === "error"}
                     onClick={() => void onUpdate(r, "done")}
                     className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 disabled:opacity-50"
                   >
-                    Mark as done
+                    Uložit jako hotovo
                   </button>
                   <button
                     type="button"
@@ -198,7 +214,7 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                     onClick={() => void onUpdate(r, "error")}
                     className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-800 disabled:opacity-50"
                   >
-                    Mark as error
+                    Označit jako chyba
                   </button>
                 </div>
 
@@ -224,6 +240,36 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                       title="Katalogový klíč nebo název souboru v bucketu product-types"
                     />
                   </div>
+                  <div className="flex min-w-[12rem] flex-col gap-1">
+                    <label className="text-xs font-medium text-slate-600">Vyber key z katalogu</label>
+                    <select
+                      value={resolvedKeyById[r.id] ?? r.resolved_image_key ?? ""}
+                      onChange={(e) =>
+                        setResolvedKeyById((prev) => ({ ...prev, [r.id]: e.target.value }))
+                      }
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
+                    >
+                      <option value="">Vyber image key</option>
+                      {imageKeys.map((key) => (
+                        <option key={key} value={key}>
+                          {key}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) void onUploadForRequest(r, file);
+                      }}
+                    />
+                    Nahrát soubor
+                  </label>
                   {(resolvedKeyById[r.id] ?? r.resolved_image_key) ? (
                     <img
                       src={getProductTypeImageUrl(resolvedKeyById[r.id] ?? r.resolved_image_key)}
@@ -239,11 +285,12 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                         setApplyToBatchById((prev) => ({ ...prev, [r.id]: e.target.checked }))
                       }
                     />
-                    propsat do batch item
+                    propsat do položky v dávce
                   </label>
                 </div>
                 <p className="text-[11px] leading-snug text-slate-500">
-                  Zadej klíč z katalogu (whitelist / galerie), žádné nahrávání souboru — jen text do DB a náhled z úložiště.
+                  Vyber nebo nahraj obrázek, pak klikni na „Uložit jako hotovo“. Se zaškrtnutým
+                  „propsat do položky v dávce“ se zapíše `approved_image_key` do `offers_raw/offers_quarantine`.
                 </p>
 
                 <div className="flex flex-wrap items-center gap-2">

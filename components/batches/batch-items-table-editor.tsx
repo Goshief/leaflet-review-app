@@ -609,13 +609,14 @@ export function BatchItemsTableEditor({ items }: Props) {
             aria-label="Zavřít"
             onClick={closeEditor}
           />
-          <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+          <div className="relative z-10 w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <h3 className="text-lg font-semibold text-slate-900">Upravit položku</h3>
             <p className="mt-1 text-xs text-slate-500">
               ID: {editing.id} · import_id: {editing.import_id} · source_table: {editing.source_table}
             </p>
+            <div className="mt-3 max-h-[55vh] overflow-y-auto pr-1">
             {editingImageState?.imageMissing ? (
-              <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
                 <p className="text-sm font-semibold text-amber-900">{editingMissingAssetState?.title}</p>
                 <p className="mt-1 text-sm text-amber-900">{editingMissingAssetState?.message}</p>
                 <p className="mt-2 text-xs text-amber-900/90">
@@ -636,7 +637,7 @@ export function BatchItemsTableEditor({ items }: Props) {
                 </div>
               </div>
             ) : (
-              <div className="mt-3 flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <p className="text-xs text-emerald-700">
                   image_key: {editingImageState?.resolvedImageKey}
                 </p>
@@ -717,6 +718,7 @@ export function BatchItemsTableEditor({ items }: Props) {
                 notes
                 <textarea className={field} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} />
               </label>
+            </div>
             </div>
 
             <div className="mt-5 flex justify-end gap-2">

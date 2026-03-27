@@ -75,7 +75,7 @@ export const GENERATION_REQUEST_UPDATE_MISSING_MESSAGE =
 const VALID_TRANSITIONS: Record<GenerationRequestStatus, GenerationRequestStatus[]> = {
   pending: ["processing", "error"],
   processing: ["done", "error"],
-  done: [],
+  done: ["done"],
   error: [],
 };
 
