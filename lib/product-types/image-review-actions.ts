@@ -12,6 +12,9 @@ export type ImageReviewPatch = {
   image_review_status: "approved" | "rejected" | "manual_override";
 };
 
+const MANUAL_OVERRIDE_MISSING_KEY_MESSAGE =
+  "Nejdřív vyber image key v poli „Vyber image key“, potom klikni na „Manual override“.";
+
 export function buildImageReviewPatch(
   action: ImageReviewAction,
   item: BatchItemImageLike,
@@ -29,6 +32,9 @@ export function buildImageReviewPatch(
 
   if (action === "manual_override") {
     const candidate = (manualImageKey ?? "").trim();
+    if (!candidate) {
+      return { ok: false, error: MANUAL_OVERRIDE_MISSING_KEY_MESSAGE };
+    }
     if (!isValidImageKey(candidate)) {
       return { ok: false, error: IMAGE_MISSING_STATUS_MESSAGE };
     }

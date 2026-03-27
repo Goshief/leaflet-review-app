@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { getProductTypeImageUrl } from "@/lib/product-types";
-import { getAvailableImageKeys } from "@/lib/product-types/image-keys";
+import { getAvailableImageKeys, isValidImageKey } from "@/lib/product-types/image-keys";
 import { buildImageReviewPatch } from "@/lib/product-types/image-review-actions";
 import { getMissingAssetWorkflowState } from "@/lib/product-types/missing-asset-workflow";
 import {
@@ -347,6 +347,8 @@ export function BatchItemsTableEditor({ items }: Props) {
     sourceRows.map((item) => {
       const imageState = resolveBatchItemImageState(item);
       const rowKey = rowKeyOf(item);
+      const selectedManualKey = (manualOverrideByRow[rowKey] ?? "").trim();
+      const selectedManualKeyValid = isValidImageKey(selectedManualKey);
       const missingAssetState = getMissingAssetWorkflowState(
         imageState,
         generationRequestedByRow[rowKey] === true
@@ -458,11 +460,18 @@ export function BatchItemsTableEditor({ items }: Props) {
               <button
                 type="button"
                 onClick={() => void onImageReviewAction(item, "manual_override")}
-                disabled={reviewSavingKey === rowKeyOf(item)}
+                disabled={reviewSavingKey === rowKey || !selectedManualKeyValid}
                 className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Manual override
               </button>
+              {selectedManualKeyValid ? (
+                <img
+                  src={getProductTypeImageUrl(selectedManualKey)}
+                  alt=""
+                  className="h-8 w-8 rounded object-contain ring-1 ring-slate-200"
+                />
+              ) : null}
               <span className="text-xs text-slate-500">
                 status: {item.image_review_status ?? "—"}
               </span>
