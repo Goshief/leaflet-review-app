@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { getProductTypeImageUrl } from "@/lib/product-types";
+import { getProductTypeImageUrl, uploadProductTypeImage } from "@/lib/product-types";
 import { getAvailableImageKeys, isValidImageKey } from "@/lib/product-types/image-keys";
 import { buildImageReviewPatch } from "@/lib/product-types/image-review-actions";
 import { getMissingAssetWorkflowState } from "@/lib/product-types/missing-asset-workflow";
@@ -343,6 +343,58 @@ export function BatchItemsTableEditor({ items }: Props) {
     })();
   };
 
+  const onUploadProductTypeImageForRow = (item: BatchCommittedItem, file: File) => {
+    const rowKey = rowKeyOf(item);
+    void (async () => {
+      setError(null);
+      setSuccess(null);
+      setReviewSavingKey(rowKey);
+      try {
+        const imageKey = await uploadProductTypeImage(file);
+        const res = await fetch("/api/batches/item", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: item.id,
+            import_id: item.import_id,
+            source_table: item.source_table,
+            patch: {
+              approved_image_key: imageKey,
+              image_review_status: "manual_override",
+            },
+          }),
+        });
+        const json = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          message?: string;
+          item?: BatchCommittedItem;
+        };
+        if (!res.ok || !json?.ok) {
+          throw new Error(json?.error || json?.message || "Nahrání obrázku se nepodařilo uložit.");
+        }
+        if (json.item) {
+          setRows((prev) =>
+            prev.map((row) =>
+              row.id === json.item!.id &&
+              row.import_id === json.item!.import_id &&
+              row.source_table === json.item!.source_table
+                ? json.item!
+                : row
+            )
+          );
+        }
+        setManualOverrideByRow((prev) => ({ ...prev, [rowKey]: imageKey }));
+        setSuccess("Obrázek byl nahrán a uložen jako approved_image_key.");
+        router.refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Nahrání obrázku selhalo.");
+      } finally {
+        setReviewSavingKey(null);
+      }
+    })();
+  };
+
   const renderRows = (sourceRows: BatchCommittedItem[]) =>
     sourceRows.map((item) => {
       const imageState = resolveBatchItemImageState(item);
@@ -465,6 +517,19 @@ export function BatchItemsTableEditor({ items }: Props) {
               >
                 Manual override
               </button>
+              <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) onUploadProductTypeImageForRow(item, file);
+                  }}
+                />
+                Nahrát do úložiště
+              </label>
               {selectedManualKeyValid ? (
                 <img
                   src={getProductTypeImageUrl(selectedManualKey)}
