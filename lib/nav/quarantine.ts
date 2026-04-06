@@ -1,6 +1,11 @@
 export function quarantineHomeHref() {
-  // Primární karanténní view (napříč dávkami).
+  // Primární karanténní view (napříč dávkami) — databázová pravda (offers_quarantine).
   return "/quarantine";
+}
+
+/** Lokální karanténa z rozpracované review session — není databázový seznam. */
+export function quarantineLocalHref() {
+  return "/quarantine/local";
 }
 
 export function quarantineSearchHref(q: string) {

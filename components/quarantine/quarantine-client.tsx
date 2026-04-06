@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { QuarantineListItem } from "@/lib/quarantine/list-quarantine";
 import { parseQuarantineQuery } from "@/lib/quarantine/query";
+import { FullProductCard } from "@/components/product/full-product-card";
+import { quarantineListItemToFullCardVm } from "@/lib/quarantine/quarantine-product-card-vm";
+import { isQuarantineRowOpenInDefaultList } from "@/lib/quarantine/quarantine-list-open";
+import { getProductTypeImageUrl } from "@/lib/product-types";
+import { resolveBatchItemImageState } from "@/lib/product-types/resolve-batch-item-image-state";
 
 function fmt(iso: string) {
   try {
@@ -15,28 +20,14 @@ function fmt(iso: string) {
 
 type Action = "approve" | "reject" | "return";
 
-function prettyQuarantineReason(raw: string | null | undefined) {
-  const src = (raw ?? "").toString().trim();
-  if (!src) return "—";
-  const labels: Record<string, string> = {
-    missing_extracted_name: "chybí extracted_name",
-    missing_price_total: "chybí price_total",
-    bad_price_total: "price_total není číslo",
-    bad_currency: "currency není CZK",
-    missing_valid_to: "chybí valid_to",
-  };
-  if (src.startsWith("db_required_missing:")) {
-    const list = src.slice("db_required_missing:".length).split(",").map((s) => s.trim()).filter(Boolean);
-    if (!list.length) return "chybí povinná pole";
-    return list.map((k) => labels[k] ?? k).join(" · ");
-  }
-  if (src === "db_required_missing") return "chybí povinná pole";
-  if (src === "rejected_in_ui") return "zamítnuto v kontrole";
-  if (src === "quarantine_in_ui") return "ručně přesunuto do karantény";
-  return src;
-}
-
-export function QuarantineClient({ items }: { items: QuarantineListItem[] }) {
+export function QuarantineClient({
+  items,
+  dbCounts,
+}: {
+  items: QuarantineListItem[];
+  /** Stejné dotazy jako přehled + `/api/stats` — po F5 konzistentní s KPI. */
+  dbCounts?: { open: number; total: number } | null;
+}) {
   const [q, setQ] = useState("");
   const [onlyOpen, setOnlyOpen] = useState(true);
   const [selected, setSelected] = useState<Record<string, true>>({});
@@ -44,7 +35,6 @@ export function QuarantineClient({ items }: { items: QuarantineListItem[] }) {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
-  // URL-driven inicializace (Přehled -> Karanténa deep-link).
   useEffect(() => {
     try {
       const parsed = parseQuarantineQuery(window.location.search || "");
@@ -61,10 +51,7 @@ export function QuarantineClient({ items }: { items: QuarantineListItem[] }) {
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     return items.filter((x) => {
-      if (onlyOpen) {
-        const r = (x.quarantine_reason ?? "").toString().toLowerCase();
-        if (r.startsWith("rejected_") || r.startsWith("returned_")) return false;
-      }
+      if (onlyOpen && !isQuarantineRowOpenInDefaultList(x.quarantine_reason)) return false;
       if (!qq) return true;
       const hay = [
         x.extracted_name ?? "",
@@ -115,8 +102,36 @@ export function QuarantineClient({ items }: { items: QuarantineListItem[] }) {
             : "Označeno jako vráceno ke kontrole"
       );
       setSelected({});
-      // Refresh bez složitého re-fetch: uživatel vidí změny po reloadu / nebo přes další iteraci.
-      // (Necháváme to jednoduché – data jsou server-side.)
+    } catch {
+      setErr("Síťová chyba.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runSingle = async (id: string, action: Action) => {
+    setBusy(true);
+    setErr(null);
+    setOk(null);
+    try {
+      const res = await fetch("/api/quarantine/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ids: [id] }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string; moved?: number };
+      if (!res.ok || !data.ok) {
+        setErr(data.error || `HTTP ${res.status}`);
+        return;
+      }
+      setOk(
+        action === "approve"
+          ? `Schváleno a přesunuto do DB: ${data.moved ?? 1}`
+          : action === "reject"
+            ? "Označeno jako zamítnuté"
+            : "Označeno jako vráceno ke kontrole"
+      );
+      setSelected({});
     } catch {
       setErr("Síťová chyba.");
     } finally {
@@ -125,14 +140,19 @@ export function QuarantineClient({ items }: { items: QuarantineListItem[] }) {
   };
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6">
+    <main
+      className="mx-auto max-w-7xl space-y-6"
+      data-testid="quarantine-db-page"
+      aria-label="Databázová karanténa"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Karanténa
+            Karanténa (databáze)
           </h1>
           <p className="mt-2 text-slate-600">
-            Seznam karantény napříč dávkami (Supabase).
+            Globální seznam z tabulky <code className="rounded bg-slate-100 px-1 text-sm">offers_quarantine</code>{" "}
+            (zdroj pravdy napříč dávkami).
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -141,6 +161,12 @@ export function QuarantineClient({ items }: { items: QuarantineListItem[] }) {
             className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
           >
             Letáky →
+          </Link>
+          <Link
+            href="/quarantine/local"
+            className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-950 shadow-sm transition hover:bg-amber-100"
+          >
+            Lokální karanténa →
           </Link>
           <Link
             href="/history"
@@ -178,9 +204,18 @@ export function QuarantineClient({ items }: { items: QuarantineListItem[] }) {
               Jen otevřená karanténa
             </label>
           </div>
-          <div className="lg:col-span-3 flex items-end justify-end">
+          <div className="lg:col-span-3 flex flex-col items-end justify-end gap-1 text-right">
+            {dbCounts != null ? (
+              <span
+                className="max-w-full rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-semibold text-indigo-900 ring-1 ring-indigo-200"
+                data-testid="quarantine-db-counts"
+                title="Shoda s přehledem (/) a totals v /api/stats"
+              >
+                DB: {dbCounts.open} otevř. · {dbCounts.total} celkem
+              </span>
+            ) : null}
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
-              Zobrazeno: {filtered.length} / {items.length}
+              Výpis: {filtered.length} z {items.length} načtených
             </span>
           </div>
         </div>
@@ -241,79 +276,113 @@ export function QuarantineClient({ items }: { items: QuarantineListItem[] }) {
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100">
+      <div className="rounded-3xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100">
         <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
           <p className="text-sm font-semibold text-slate-900">
             Položky v karanténě
           </p>
         </div>
         <div className="divide-y divide-slate-100">
-          {filtered.map((x) => (
-            <div key={x.id} className="flex flex-col gap-3 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex min-w-0 gap-3">
+          {filtered.map((x) => {
+            const vm = quarantineListItemToFullCardVm(x);
+            const imageState = resolveBatchItemImageState({
+              approved_image_key: x.approved_image_key,
+              suggested_image_key: x.image_key,
+            });
+            const leftColumn = (
+              <div className="flex gap-3 sm:flex-col sm:items-stretch">
                 <input
                   type="checkbox"
                   checked={!!selected[x.id]}
                   onChange={(e) => toggle(x.id, e.target.checked)}
-                  className="mt-1 h-5 w-5 shrink-0 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  className="mt-1 h-5 w-5 shrink-0 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-500 sm:mx-auto sm:mt-0"
+                  aria-label="Vybrat položku"
                 />
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-slate-900">
-                    {x.extracted_name ?? "—"}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {x.store_id ?? x.source_type ?? "—"} · dávka{" "}
-                    <span className="font-semibold text-slate-700">
-                      {x.batch?.batch_no ?? "—"}
-                    </span>{" "}
-                    · import <span className="font-mono">{x.import_id}</span>
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Důvod:{" "}
-                    <span className="font-semibold text-slate-700">
-                      {prettyQuarantineReason(x.quarantine_reason)}
-                    </span>{" "}
-                    · Operátor:{" "}
-                    <span className="font-semibold text-slate-700">
-                      {x.actor ?? "—"}
-                    </span>{" "}
-                    · {fmt(x.created_at)}
-                  </p>
+                <div className="flex min-h-[88px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 sm:min-h-[120px]">
+                  {imageState.hasValidImage ? (
+                    <img
+                      data-testid="quarantine-product-image-preview"
+                      src={getProductTypeImageUrl(imageState.resolvedImageKey)}
+                      alt=""
+                      className="max-h-[120px] max-w-[132px] object-contain"
+                    />
+                  ) : vm.hasOcrThumb ? (
+                    <span className="px-2 text-center text-[11px] font-medium leading-snug text-slate-500">
+                      OCR výřez — v dávce u náhledu stránky
+                    </span>
+                  ) : (
+                    <span className="px-2 text-center text-[11px] font-medium leading-snug text-slate-500">
+                      Bez náhledu produktu
+                    </span>
+                  )}
                 </div>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setSelected({ [x.id]: true });
-                    void bulk("approve");
-                  }}
-                  className="rounded-2xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  Schválit
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setSelected({ [x.id]: true });
-                    void bulk("reject");
-                  }}
-                  className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
-                >
-                  Zamítnout
-                </button>
-                <Link
-                  href={`/batches/${x.import_id}`}
-                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                >
-                  Otevřít dávku →
-                </Link>
+            );
+            return (
+              <div key={x.id} className="space-y-3 px-4 py-5 sm:px-6">
+                <FullProductCard
+                  variant="quarantine"
+                  vm={vm}
+                  leftColumn={leftColumn}
+                  rootTag="div"
+                  rootTestId="quarantine-product-card"
+                  actionsSlot={
+                    <>
+                      <Link
+                        href={`/batches/${x.import_id}`}
+                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                      >
+                        Upravit
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void runSingle(x.id, "approve")}
+                        className="rounded-2xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        Schválit
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void runSingle(x.id, "return")}
+                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Vrátit
+                      </button>
+                      <button
+                        type="button"
+                        disabled
+                        title="Položka je již v karanténě"
+                        className="cursor-not-allowed rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-400"
+                      >
+                        Karanténa
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void runSingle(x.id, "reject")}
+                        className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                      >
+                        Zamítnout
+                      </button>
+                      <Link
+                        href={`/batches/${x.import_id}`}
+                        className="rounded-2xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-center text-sm font-semibold text-indigo-900 shadow-sm hover:bg-indigo-100"
+                      >
+                        Otevřít dávku →
+                      </Link>
+                    </>
+                  }
+                />
+                <p className="text-xs text-slate-500">
+                  {x.store_id ?? x.source_type ?? "—"} · dávka{" "}
+                  <span className="font-semibold text-slate-700">{x.batch?.batch_no ?? "—"}</span> · vytvořeno{" "}
+                  {fmt(x.created_at)} · operátor: {x.actor ?? "—"}
+                </p>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {filtered.length === 0 ? (
             <div className="px-6 py-10 text-center text-sm text-slate-500">
               Nic k zobrazení (zkus upravit filtry).
@@ -324,4 +393,3 @@ export function QuarantineClient({ items }: { items: QuarantineListItem[] }) {
     </main>
   );
 }
-

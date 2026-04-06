@@ -4,11 +4,42 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+function NotificationInfoButton({ mobile = false }: { mobile?: boolean }) {
+  return (
+    <details className="relative">
+      <summary
+        className={
+          mobile
+            ? "list-none rounded-full p-2 text-slate-500 hover:bg-slate-100"
+            : "list-none rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+        }
+        aria-label="Notifikace nejsou zatím aktivní"
+        title="Notifikace nejsou zatím aktivní"
+      >
+        🔔
+      </summary>
+      <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-xl">
+        <p className="font-semibold text-slate-900">Interní notifikace v administraci</p>
+        <p className="mt-1">
+          Emailové ani in-app notifikace zatím nejsou aktivní. Sleduj stavy v
+          <span className="font-semibold"> Dávky</span>,
+          <span className="font-semibold"> Karanténa</span> a
+          <span className="font-semibold"> Historie</span>.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 function navItem(href: string, pathname: string, label: string, icon: string) {
   const active =
     href === "/"
       ? pathname === "/"
-      : pathname === href || pathname.startsWith(`${href}/`);
+      : href === "/quarantine"
+        ? pathname === "/quarantine"
+        : href === "/quarantine/local"
+          ? pathname === "/quarantine/local" || pathname.startsWith("/quarantine/local/")
+          : pathname === href || pathname.startsWith(`${href}/`);
   return (
     <Link
       href={href}
@@ -41,7 +72,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex flex-1 flex-col gap-0.5 px-3 py-4">
           {navItem("/", pathname, "Přehled", "📊")}
           {navItem("/batches", pathname, "Dávky", "📄")}
-          {navItem("/quarantine", pathname, "Karanténa", "🗂")}
+          {navItem("/quarantine", pathname, "Karanténa (DB)", "🗂")}
+          {navItem("/quarantine/local", pathname, "Lokální karanténa", "📋")}
           {navItem("/upload", pathname, "Nahrát", "⬆")}
           {navItem("/review", pathname, "Ke kontrole", "✓")}
           {navItem("/history", pathname, "Historie", "🕘")}
@@ -66,13 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               Letáky <span className="text-indigo-600">Admin</span>
             </Link>
             <div className="ml-auto flex items-center gap-1">
-              <button
-                type="button"
-                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
-                aria-label="Upozornění"
-              >
-                🔔
-              </button>
+              <NotificationInfoButton mobile />
               <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 ring-2 ring-white shadow-md" />
             </div>
           </div>
@@ -81,7 +107,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               Dávky
             </Link>
             <Link href="/quarantine" className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">
-              Karanténa
+              Karanténa (DB)
+            </Link>
+            <Link href="/quarantine/local" className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">
+              Lokál. karanténa
             </Link>
             <Link href="/upload" className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">
               Nahrát
@@ -103,13 +132,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           </nav>
           <div className="ml-auto hidden items-center gap-1 lg:flex">
-            <button
-              type="button"
-              className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-              aria-label="Upozornění"
-            >
-              🔔
-            </button>
+            <NotificationInfoButton />
             <div
               className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 ring-2 ring-white shadow-md"
               title="Účet"

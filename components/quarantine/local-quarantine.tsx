@@ -25,6 +25,10 @@ function safeParse<T>(s: string | null): T | null {
   }
 }
 
+/**
+ * Seznam položek v karanténě z lokální review session (localStorage).
+ * Použití: `/quarantine/local` — není náhrada za databázovou karanténu.
+ */
 export function LocalQuarantine() {
   const [sessions, setSessions] = useState<Array<{ key: string; state: ReviewStateEntry }>>([]);
 
@@ -130,30 +134,25 @@ export function LocalQuarantine() {
   }, [sessions]);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Karanténa
-          </h1>
-          <p className="mt-2 text-slate-600">
-            Lokální režim (bez Supabase): ukazuju karanténu z rozpracovaných kontrol.
-          </p>
-        </div>
-        <Link href={reviewQuarantineHref()} className="text-sm font-semibold text-indigo-700 hover:underline">
-          Otevřít review karanténu →
-        </Link>
+    <div className="space-y-6" data-testid="quarantine-local-content">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-600">
+          Pokračovat v kontrole s filtrem karanténa:{" "}
+          <Link href={reviewQuarantineHref()} className="font-semibold text-indigo-700 hover:underline">
+            Otevřít review →
+          </Link>
+        </p>
       </div>
 
       {localItems.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-[0_4px_24px_rgba(15,23,42,0.04)]">
-          <p className="text-slate-600">Zatím žádné položky v karanténě.</p>
+          <p className="text-slate-600">Zatím žádné položky v lokální karanténě (v uložené kontrole).</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100">
           <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
             <p className="text-sm font-semibold text-slate-900">
-              Položky v karanténě: {localItems.length}
+              Položky v lokální karanténě: {localItems.length}
             </p>
           </div>
           <div className="divide-y divide-slate-100">
@@ -182,7 +181,6 @@ export function LocalQuarantine() {
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }
-

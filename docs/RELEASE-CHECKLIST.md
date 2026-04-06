@@ -35,3 +35,14 @@
 - [ ] No unexpected `fallback_used: "supabase-js"` in production
 - [ ] No critical errors in server logs for first 30 min
 
+## 6) Quarantine route contract (Bod #1) — production
+
+Před označením bodu #1 za hotový ověř na **produkční URL** (ne jen lokálně):
+
+- [ ] Vercel **Root Directory** = `parser/leaflet-review-app` (při monorepu v kořeni repo)
+- [ ] Nasazená větev obsahuje commit s `app/quarantine/page.tsx` (DB-first, žádný `LocalQuarantine` na `/quarantine`) a `app/quarantine/local/page.tsx`
+- [ ] `GET /quarantine/local` → **200**, viditelný `data-testid="quarantine-local-banner"` (text o tom, že to není DB)
+- [ ] `GET /quarantine` → **ne** starý text „Lokální režim (bez Supabase)“ jako hlavní obsah celé stránky; buď DB výpis / empty / not-configured / error podle env
+- [ ] `npm run build` v `parser/leaflet-review-app` v build výpisu obsahuje řádky `ƒ /quarantine` a `ƒ /quarantine/local`
+- [ ] `npm run test:e2e:quarantine-db-route` proti produkci nebo stagingu s platným `PLAYWRIGHT_BASE_URL`
+

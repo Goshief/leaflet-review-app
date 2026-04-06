@@ -12,6 +12,7 @@ import type {
   RetailerDominanceRow,
 } from "@/lib/dashboard/get-dashboard";
 import { useEffect, useMemo, useState } from "react";
+import { quarantineLocalHref } from "@/lib/nav/quarantine";
 
 type CommitLogEntry = {
   committed_at?: string;
@@ -100,10 +101,33 @@ export function LocalDashboard() {
     const todayEntries = parsed.filter((x) => x.ms >= today0).map((x) => x.e);
     const todaySum = sumCounts(todayEntries);
 
+    const windowStartDate = new Date(today0);
+    windowStartDate.setDate(windowStartDate.getDate() - 29);
+    const windowStart0 = startOfDayMs(windowStartDate);
+    const windowEntries = parsed.filter((x) => x.ms >= windowStart0).map((x) => x.e);
+    const windowSum = sumCounts(windowEntries);
+
     // Trend 7d from commit log.
     const trend_7d: DashboardTrendPoint[] = Array.from({ length: 7 }, (_, idx) => {
       const d = new Date(today0);
       d.setDate(d.getDate() - (6 - idx));
+      const day0 = startOfDayMs(d);
+      const day1 = day0 + 24 * 3600 * 1000;
+      const entries = parsed.filter((x) => x.ms >= day0 && x.ms < day1).map((x) => x.e);
+      const s = sumCounts(entries);
+      return {
+        date: yyyyMmDd(new Date(day0)),
+        inserted: s.inserted,
+        approved: s.approved,
+        quarantined: s.quarantined,
+        rejected: s.rejected,
+        pending: s.pending,
+      };
+    });
+
+    const trend_30d: DashboardTrendPoint[] = Array.from({ length: 30 }, (_, idx) => {
+      const d = new Date(today0);
+      d.setDate(d.getDate() - (29 - idx));
       const day0 = startOfDayMs(d);
       const day1 = day0 + 24 * 3600 * 1000;
       const entries = parsed.filter((x) => x.ms >= day0 && x.ms < day1).map((x) => x.e);
@@ -163,8 +187,8 @@ export function LocalDashboard() {
     if (todaySum.quarantined > 0)
       alerts.push({
         kind: "warning",
-        text: `${todaySum.quarantined} v karanténě`,
-        href: "/review?tab=quarantine&filter=quarantine",
+        text: `${todaySum.quarantined} v karanténě (z lokálního commit logu)`,
+        href: quarantineLocalHref(),
       });
     if (todaySum.rejected > 0) alerts.push({ kind: "info", text: `${todaySum.rejected} zamítnuto`, href: "/review?tab=rejected" });
 
@@ -193,11 +217,29 @@ export function LocalDashboard() {
       approval_rate_pct: computeApprovalRatePct(todaySum.inserted, todaySum.approved),
     };
 
+    const window_30d: DashboardKpis = {
+      inserted: windowSum.inserted,
+      approved: windowSum.approved,
+      quarantined: windowSum.quarantined,
+      rejected: windowSum.rejected,
+      pending: windowSum.pending,
+      approval_rate_pct: computeApprovalRatePct(windowSum.inserted, windowSum.approved),
+    };
+
+    const allSum = sumCounts(parsed.map((x) => x.e));
+    const table_counts = {
+      offers_raw: allSum.approved,
+      offers_quarantine_total: allSum.quarantined,
+      offers_quarantine_open: allSum.quarantined,
+    };
+
     return {
       today,
+      window_30d,
+      table_counts,
       alerts,
       trend_7d,
-      trend_30d: trend_7d,
+      trend_30d,
       dominance_inserted,
       dominance_approved,
       dominance_quarantined,
@@ -224,6 +266,9 @@ export function LocalDashboard() {
         ...derived.alerts,
       ]}
       today={derived.today}
+      window_30d={derived.window_30d}
+      table_counts={derived.table_counts}
+      queryFailed={false}
       trend_7d={derived.trend_7d}
       trend_30d={derived.trend_30d}
       dominance_inserted={derived.dominance_inserted}
