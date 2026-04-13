@@ -59,6 +59,19 @@ function navItem(href: string, pathname: string, label: string, icon: string) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const adminPrefixes = [
+    "/batches",
+    "/review",
+    "/quarantine",
+    "/history",
+    "/settings",
+    "/image-generation-requests",
+    "/parsers",
+    "/product-types",
+    "/upload",
+  ];
+  const isAdminPath = adminPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  if (!isAdminPath) return <>{children}</>;
 
   return (
     <div className="flex min-h-screen bg-slate-50">

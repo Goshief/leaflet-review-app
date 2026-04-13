@@ -60,7 +60,12 @@
     "test:image-candidate-pipeline": "node --experimental-strip-types scripts/test-image-candidate-pipeline.mts",
     "e2e:orion": "node --experimental-strip-types scripts/e2e-orion-flow.mts",
     "test:stabilization": "npm run test:commit-error-shape && npm run test:stats-error-shape && npm run test:commit-flow && npm run test:dashboard-metrics && npm run test:dashboard-window-kpis && npm run test:dashboard-yesterday-coverage && npm run test:dashboard-trend-nonzero && npm run test:dashboard-timestamp-fallbacks && npm run test:dashboard-raw-null-created-at && npm run test:timezone-boundary && npm run test:routing-overview-quarantine && npm run test:review-filter-state",
-    "verify": "npm run test:commit-error-shape && npm run test:stats-error-shape && npm run test:commit-flow && npm run test:dashboard-metrics && npm run test:dashboard-yesterday-coverage && npm run test:timezone-boundary && npm run test:routing-overview-quarantine && npm run test:review-filter-state"
+    "verify": "npm run test:commit-error-shape && npm run test:stats-error-shape && npm run test:commit-flow && npm run test:dashboard-metrics && npm run test:dashboard-yesterday-coverage && npm run test:timezone-boundary && npm run test:routing-overview-quarantine && npm run test:review-filter-state",
+    "test:shopper-planner": "tsx scripts/test-shopper-planner.mts",
+    "test:shopper-input-validation": "tsx scripts/test-shopper-input-validation.mts",
+    "runtime:gate": "bash scripts/bootstrap-runtime-gate.sh",
+    "bootstrap:local": "npm ci && cp -n .env.example .env && echo \"Edit .env and run npm run runtime:gate\"",
+    "test:shopper-db-connection": "node scripts/test-shopper-db-connection.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
@@ -83,8 +88,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "tsx": "^4.20.0"
   }
 }
-
-
