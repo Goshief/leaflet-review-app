@@ -15,6 +15,13 @@ export type ShopperHomepageProduct = {
   imageUrl: string | null;
 };
 
+export type HomepageDataQuality = {
+  totalRows: number;
+  withPriceStandard: number;
+  withLoyaltyFlagTrue: number;
+  withApprovedImageKey: number;
+};
+
 const imagePool = ["/mockup/thumb-1.svg", "/mockup/thumb-2.svg", "/mockup/thumb-3.svg"];
 
 const templateProducts: ShopperHomepageProduct[] = [
@@ -52,7 +59,14 @@ function fmtDate(value: string | null): string | null {
 
 export async function getShopperHomepageData() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) return { products: templateProducts, source: "template" as const, activeProducts: templateProducts.length };
+  if (!supabase) {
+    return {
+      products: templateProducts,
+      source: "template" as const,
+      activeProducts: templateProducts.length,
+      dataQuality: null as HomepageDataQuality | null,
+    };
+  }
 
   const r = await supabase
     .from("offers_raw")
@@ -64,7 +78,12 @@ export async function getShopperHomepageData() {
     .limit(800);
 
   if (r.error || !r.data) {
-    return { products: templateProducts, source: "template" as const, activeProducts: templateProducts.length };
+    return {
+      products: templateProducts,
+      source: "template" as const,
+      activeProducts: templateProducts.length,
+      dataQuality: null as HomepageDataQuality | null,
+    };
   }
 
   const fromDb = r.data
@@ -104,7 +123,27 @@ export async function getShopperHomepageData() {
     })
     .filter((x): x is ShopperHomepageProduct => Boolean(x));
 
-  if (!fromDb.length) return { products: templateProducts, source: "template" as const, activeProducts: templateProducts.length };
+  const [totalRows, withPriceStandard, withLoyaltyFlagTrue, withApprovedImageKey] = await Promise.all([
+    supabase.from("offers_raw").select("*", { count: "exact", head: true }),
+    supabase.from("offers_raw").select("*", { count: "exact", head: true }).not("price_standard", "is", null),
+    supabase.from("offers_raw").select("*", { count: "exact", head: true }).eq("has_loyalty_card_price", true),
+    supabase.from("offers_raw").select("*", { count: "exact", head: true }).not("approved_image_key", "is", null),
+  ]);
+  const dataQuality: HomepageDataQuality = {
+    totalRows: totalRows.count ?? 0,
+    withPriceStandard: withPriceStandard.count ?? 0,
+    withLoyaltyFlagTrue: withLoyaltyFlagTrue.count ?? 0,
+    withApprovedImageKey: withApprovedImageKey.count ?? 0,
+  };
+
+  if (!fromDb.length) {
+    return {
+      products: templateProducts,
+      source: "template" as const,
+      activeProducts: templateProducts.length,
+      dataQuality,
+    };
+  }
 
   const padded = [...fromDb.slice(0, 430)];
   while (padded.length < 430) {
@@ -112,5 +151,5 @@ export async function getShopperHomepageData() {
     padded.push({ ...t, id: `${t.id}-fallback-${padded.length}` });
   }
 
-  return { products: padded, source: "supabase" as const, activeProducts: fromDb.length };
+  return { products: padded, source: "supabase" as const, activeProducts: fromDb.length, dataQuality };
 }

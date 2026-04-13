@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ShopperHomepageProduct } from "@/lib/shopper/homepage-data";
+import type { HomepageDataQuality, ShopperHomepageProduct } from "@/lib/shopper/homepage-data";
 
 type Props = {
   products: ShopperHomepageProduct[];
   initialSessionId: string;
   activeProducts: number;
+  dataQuality: HomepageDataQuality | null;
 };
 
 function czk(v: number | null) {
@@ -14,7 +15,7 @@ function czk(v: number | null) {
   return `${v.toFixed(2).replace('.', ',')} Kč`;
 }
 
-export function ShopperHomepage({ products, initialSessionId: _initialSessionId, activeProducts }: Props) {
+export function ShopperHomepage({ products, initialSessionId: _initialSessionId, activeProducts, dataQuality }: Props) {
   const [onlyLoyalty, setOnlyLoyalty] = useState(false);
   const [onlyWithPhoto, setOnlyWithPhoto] = useState(false);
   const [onlyWithOriginalPrice, setOnlyWithOriginalPrice] = useState(false);
@@ -67,6 +68,12 @@ export function ShopperHomepage({ products, initialSessionId: _initialSessionId,
           <br />
           S fotkou: {counts.withPhoto} · se slevou / původní cenou: {counts.withDiscount} · s efektivní cenou s kartou: {counts.withLoyalty}
         </p>
+        {dataQuality ? (
+          <p className="mb-3 rounded-lg border border-[#d8dfcf] bg-white px-3 py-2 text-xs text-[#173f3ab8]">
+            Data quality (offers_raw): total {dataQuality.totalRows} · price_standard {dataQuality.withPriceStandard} ·
+            {" "}has_loyalty_card_price=true {dataQuality.withLoyaltyFlagTrue} · approved_image_key {dataQuality.withApprovedImageKey}
+          </p>
+        ) : null}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((p, idx) => (

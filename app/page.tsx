@@ -11,6 +11,7 @@ export default async function Home() {
       products={homepageData.products}
       initialSessionId=""
       activeProducts={homepageData.activeProducts}
+      dataQuality={homepageData.dataQuality}
     />
   );
 }
