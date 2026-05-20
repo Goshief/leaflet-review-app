@@ -12,7 +12,7 @@ type Props = {
 
 function czk(v: number | null) {
   if (v == null) return "—";
-  return `${v.toFixed(2).replace('.', ',')} Kč`;
+  return `${v.toFixed(2).replace(".", ",")} Kč`;
 }
 
 export function ShopperHomepage({ products, initialSessionId: _initialSessionId, activeProducts, dataQuality }: Props) {
@@ -37,75 +37,111 @@ export function ShopperHomepage({ products, initialSessionId: _initialSessionId,
   }, [products]);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6">
-      <header className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex-1 rounded-2xl border border-[#d8dfcf] bg-[#f4f5ee] px-4 py-3">
-          <p className="text-base font-semibold text-[#173f3a]">Ahoj Esterka!</p>
-          <p className="text-xs text-[#173f3ab3]">Přehled produktů z databáze</p>
+    <main style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 16px", color: "#0f172a" }}>
+      <header style={{ marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ flex: 1, borderRadius: 20, border: "1px solid #d8dfcf", background: "#f4f5ee", padding: 16 }}>
+          <p style={{ fontSize: 16, fontWeight: 700, color: "#173f3a", margin: 0 }}>Ahoj Esterka!</p>
+          <p style={{ fontSize: 12, color: "#173f3a", opacity: 0.75, margin: "4px 0 0" }}>Přehled produktů z databáze</p>
         </div>
       </header>
 
-      <section className="rounded-3xl border border-[#d8dfcf] bg-[#f4f5ee] p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap gap-2">
-          <button onClick={() => setOnlyLoyalty((s) => !s)} className={`rounded-lg px-3 py-1.5 text-sm ${onlyLoyalty ? 'bg-[#175a41] text-white' : 'bg-white text-[#173f3a] border border-[#d8dfcf]'}`}>Jen s kartou</button>
-          <button onClick={() => setOnlyWithPhoto((s) => !s)} className={`rounded-lg px-3 py-1.5 text-sm ${onlyWithPhoto ? 'bg-[#175a41] text-white' : 'bg-white text-[#173f3a] border border-[#d8dfcf]'}`}>Jen s fotkou</button>
-          <button onClick={() => setOnlyWithOriginalPrice((s) => !s)} className={`rounded-lg px-3 py-1.5 text-sm ${onlyWithOriginalPrice ? 'bg-[#175a41] text-white' : 'bg-white text-[#173f3a] border border-[#d8dfcf]'}`}>Jen s původní cenou</button>
-          <button className="rounded-lg bg-[#175a41] px-3 py-1.5 text-sm text-white">Použít filtry</button>
+      <section style={{ borderRadius: 24, border: "1px solid #d8dfcf", background: "#f4f5ee", padding: 16, boxShadow: "0 1px 2px rgba(15,23,42,0.08)" }}>
+        <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button onClick={() => setOnlyLoyalty((s) => !s)} style={{ borderRadius: 8, padding: "8px 12px", fontSize: 14, border: "1px solid #d8dfcf", background: onlyLoyalty ? "#175a41" : "#fff", color: onlyLoyalty ? "#fff" : "#173f3a" }}>Jen s kartou</button>
+          <button onClick={() => setOnlyWithPhoto((s) => !s)} style={{ borderRadius: 8, padding: "8px 12px", fontSize: 14, border: "1px solid #d8dfcf", background: onlyWithPhoto ? "#175a41" : "#fff", color: onlyWithPhoto ? "#fff" : "#173f3a" }}>Jen s fotkou</button>
+          <button onClick={() => setOnlyWithOriginalPrice((s) => !s)} style={{ borderRadius: 8, padding: "8px 12px", fontSize: 14, border: "1px solid #d8dfcf", background: onlyWithOriginalPrice ? "#175a41" : "#fff", color: onlyWithOriginalPrice ? "#fff" : "#173f3a" }}>Jen s původní cenou</button>
+          <button style={{ borderRadius: 8, padding: "8px 12px", fontSize: 14, border: 0, background: "#175a41", color: "#fff" }}>Použít filtry</button>
           <button
             onClick={() => {
               setOnlyLoyalty(false);
               setOnlyWithPhoto(false);
               setOnlyWithOriginalPrice(false);
             }}
-            className="rounded-lg border border-[#d8dfcf] bg-white px-3 py-1.5 text-sm text-[#173f3a]"
+            style={{ borderRadius: 8, padding: "8px 12px", fontSize: 14, border: "1px solid #d8dfcf", background: "#fff", color: "#173f3a" }}
           >
             Reset
           </button>
         </div>
 
-        <p className="mb-3 text-sm text-[#173f3a]">
+        <p style={{ margin: "0 0 12px", fontSize: 14, color: "#173f3a" }}>
           Zobrazeno {filtered.length} produktů po filtrech z {activeProducts} aktivních načtených položek.
           <br />
           S fotkou: {counts.withPhoto} · se slevou / původní cenou: {counts.withDiscount} · s efektivní cenou s kartou: {counts.withLoyalty}
         </p>
         {dataQuality ? (
-          <p className="mb-3 rounded-lg border border-[#d8dfcf] bg-white px-3 py-2 text-xs text-[#173f3ab8]">
-            Data quality (offers_raw): total {dataQuality.totalRows} · price_standard {dataQuality.withPriceStandard} ·
-            {" "}has_loyalty_card_price=true {dataQuality.withLoyaltyFlagTrue} · approved_image_key {dataQuality.withApprovedImageKey}
+          <p style={{ margin: "0 0 16px", borderRadius: 8, border: "1px solid #d8dfcf", background: "#fff", padding: "8px 12px", fontSize: 12, color: "rgba(23,63,58,0.72)" }}>
+            Data quality (offers_raw): total {dataQuality.totalRows} · price_standard {dataQuality.withPriceStandard} ·{" "}
+            has_loyalty_card_price=true {dataQuality.withLoyaltyFlagTrue} · approved_image_key {dataQuality.withApprovedImageKey}
           </p>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((p, idx) => (
-            <article key={`${p.id}-${idx}`} className="rounded-2xl border border-[#d3d7cb] bg-white p-3 shadow-sm">
-              {p.imageUrl ? (
-                <img src={p.imageUrl} alt={p.name} className="mb-2 h-24 w-full rounded-xl object-cover" />
-              ) : (
-                <div className="mb-2 h-24 rounded-xl bg-gradient-to-br from-[#f6f8ef] to-[#e9efe0]" />
-              )}
+        {filtered.length === 0 ? (
+          <div style={{ borderRadius: 16, background: "#fff", border: "1px solid #d8dfcf", padding: 24, color: "#173f3a" }}>
+            Žádné produkty neodpovídají filtrům. Resetni filtry nebo zkontroluj import.
+          </div>
+        ) : (
+          <div
+            data-testid="shopper-product-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gap: 14,
+              width: "100%",
+              minHeight: 1,
+              overflow: "visible",
+              opacity: 1,
+              visibility: "visible",
+            }}
+          >
+            {filtered.map((p, idx) => (
+              <article
+                key={`${p.id}-${idx}`}
+                style={{
+                  display: "block",
+                  visibility: "visible",
+                  opacity: 1,
+                  minHeight: 260,
+                  borderRadius: 18,
+                  border: "1px solid #d3d7cb",
+                  background: "#ffffff",
+                  padding: 12,
+                  boxShadow: "0 1px 3px rgba(15,23,42,0.12)",
+                  color: "#103f3a",
+                }}
+              >
+                {p.imageUrl ? (
+                  <img
+                    src={p.imageUrl}
+                    alt={p.name}
+                    style={{ marginBottom: 8, height: 110, width: "100%", borderRadius: 14, objectFit: "cover", background: "#eef2f7", display: "block" }}
+                  />
+                ) : (
+                  <div style={{ marginBottom: 8, height: 110, borderRadius: 14, background: "linear-gradient(135deg,#f6f8ef,#e9efe0)" }} />
+                )}
 
-              <div className="mb-1 flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs text-[#173f3ab3]">{p.store}{p.validTo ? ` · do ${p.validTo}` : ""}</p>
-                  <p className="text-base font-semibold leading-tight text-[#103f3a]">{p.name}</p>
-                  {p.detail ? <p className="text-sm text-[#103f3acc]">{p.detail}</p> : null}
+                <div style={{ marginBottom: 8, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 12, color: "rgba(23,63,58,0.7)" }}>{p.store}{p.validTo ? ` · do ${p.validTo}` : ""}</p>
+                    <p style={{ margin: "4px 0 0", fontSize: 16, fontWeight: 800, lineHeight: 1.2, color: "#103f3a" }}>{p.name}</p>
+                    {p.detail ? <p style={{ margin: "4px 0 0", fontSize: 13, color: "rgba(16,63,58,0.8)" }}>{p.detail}</p> : null}
+                  </div>
+                  {p.badge ? <span style={{ borderRadius: 999, background: "#3f8b45", padding: "4px 8px", fontSize: 12, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{p.badge}</span> : null}
                 </div>
-                {p.badge ? <span className="rounded-full bg-[#3f8b45] px-2 py-1 text-xs font-bold text-white">{p.badge}</span> : null}
-              </div>
 
-              <div className="mt-2">
-                <p className="text-2xl font-semibold text-[#123f3a]">{czk(p.price)}</p>
-                {p.regularPrice != null && p.regularPrice > p.price ? (
-                  <p className="text-sm text-[#5f6f6c] line-through">{czk(p.regularPrice)}</p>
-                ) : null}
-                <p className="text-xs text-[#173f3a99]">
-                  {p.hasLoyaltyPrice ? `Cena s kartou: ${czk(p.loyaltyPrice)}` : "Nabídka bez karty"}
-                </p>
-                {p.unitPrice != null ? <p className="text-xs text-[#173f3a99]">Jednotková cena: {czk(p.unitPrice)}</p> : null}
-              </div>
-            </article>
-          ))}
-        </div>
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ margin: 0, fontSize: 26, fontWeight: 900, color: "#123f3a" }}>{czk(p.price)}</p>
+                  {p.regularPrice != null && p.regularPrice > p.price ? (
+                    <p style={{ margin: "2px 0 0", fontSize: 14, color: "#5f6f6c", textDecoration: "line-through" }}>{czk(p.regularPrice)}</p>
+                  ) : null}
+                  <p style={{ margin: "6px 0 0", fontSize: 12, color: "rgba(23,63,58,0.65)" }}>
+                    {p.hasLoyaltyPrice ? `Cena s kartou: ${czk(p.loyaltyPrice)}` : "Nabídka bez karty"}
+                  </p>
+                  {p.unitPrice != null ? <p style={{ margin: "3px 0 0", fontSize: 12, color: "rgba(23,63,58,0.65)" }}>Jednotková cena: {czk(p.unitPrice)}</p> : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );
