@@ -38,7 +38,9 @@ export function resolveBatchItemImageState(item: BatchItemImageLike): BatchItemI
   };
 }
 
-export function canBatchItemRunSaveAction(item: BatchItemImageLike): boolean {
-  return resolveBatchItemImageState(item).hasValidImage;
+export function canBatchItemRunSaveAction(_item: BatchItemImageLike): boolean {
+  // Ruční editace a vytvoření položky nesmí být blokované chybějícím obrázkem.
+  // Validní image key se dál vyžaduje pouze pro image-review akce typu approve/manual_override
+  // v serverové logice.
+  return true;
 }
-
