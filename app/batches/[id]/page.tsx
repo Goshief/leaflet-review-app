@@ -154,7 +154,7 @@ export default async function BatchDetailPage({ params }: Props) {
       <p className="text-sm text-slate-600">
         Detail importu z tabulky <code className="text-slate-800">imports</code>.
       </p>
-      <BatchItemsTableEditor items={committedItems} />
+      <BatchItemsTableEditor items={committedItems} importId={id} />
     </main>
   );
 }
