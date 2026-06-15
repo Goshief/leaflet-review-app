@@ -7,7 +7,6 @@ import { getAvailableImageKeys, isValidImageKey } from "@/lib/product-types/imag
 import { buildImageReviewPatch } from "@/lib/product-types/image-review-actions";
 import { getMissingAssetWorkflowState } from "@/lib/product-types/missing-asset-workflow";
 import {
-  canBatchItemRunSaveAction,
   IMAGE_MISSING_STATUS_MESSAGE,
   resolveBatchItemImageState,
 } from "@/lib/product-types/resolve-batch-item-image-state";
@@ -39,6 +38,7 @@ export type BatchCommittedItem = {
 
 type Props = {
   items: BatchCommittedItem[];
+  importId: string;
 };
 
 type FormState = {
@@ -58,6 +58,26 @@ type FormState = {
   valid_from: string;
   valid_to: string;
 };
+
+function emptyForm(): FormState {
+  return {
+    extracted_name: "",
+    price_total: "",
+    currency: "CZK",
+    pack_qty: "",
+    pack_unit: "",
+    pack_unit_qty: "",
+    price_standard: "",
+    typical_price_per_unit: "",
+    price_with_loyalty_card: "",
+    has_loyalty_card_price: false,
+    notes: "",
+    brand: "",
+    category: "",
+    valid_from: "",
+    valid_to: "",
+  };
+}
 
 function toInput(value: string | number | null | undefined) {
   if (value == null) return "";
@@ -96,6 +116,45 @@ function makeForm(item: BatchCommittedItem): FormState {
   };
 }
 
+function buildPatch(form: FormState) {
+  const priceTotal = toNumberOrNull(form.price_total);
+  const packQty = toNumberOrNull(form.pack_qty);
+  const packUnitQty = toNumberOrNull(form.pack_unit_qty);
+  const priceStandard = toNumberOrNull(form.price_standard);
+  const ppu = toNumberOrNull(form.typical_price_per_unit);
+  const loyalty = toNumberOrNull(form.price_with_loyalty_card);
+
+  const nums = [
+    ["price_total", priceTotal],
+    ["pack_qty", packQty],
+    ["pack_unit_qty", packUnitQty],
+    ["price_standard", priceStandard],
+    ["typical_price_per_unit", ppu],
+    ["price_with_loyalty_card", loyalty],
+  ] as const;
+  for (const [name, value] of nums) {
+    if (Number.isNaN(value)) throw new Error(`Pole ${name} musí být číslo.`);
+  }
+
+  return {
+    extracted_name: form.extracted_name.trim() || null,
+    price_total: priceTotal,
+    currency: form.currency.trim() || null,
+    pack_qty: packQty,
+    pack_unit: form.pack_unit.trim() || null,
+    pack_unit_qty: packUnitQty,
+    price_standard: priceStandard,
+    typical_price_per_unit: ppu,
+    price_with_loyalty_card: loyalty,
+    has_loyalty_card_price: form.has_loyalty_card_price,
+    notes: form.notes.trim() || null,
+    brand: form.brand.trim() || null,
+    category: form.category.trim() || null,
+    valid_from: form.valid_from || null,
+    valid_to: form.valid_to || null,
+  };
+}
+
 function cell(value: string | number | boolean | null | undefined) {
   if (value == null || value === "") return "—";
   if (typeof value === "boolean") return value ? "ano" : "ne";
@@ -111,10 +170,12 @@ function prettyDateTime(iso: string | null) {
   }
 }
 
-export function BatchItemsTableEditor({ items }: Props) {
+export function BatchItemsTableEditor({ items, importId }: Props) {
   const router = useRouter();
   const [rows, setRows] = useState<BatchCommittedItem[]>(items);
   const [editing, setEditing] = useState<BatchCommittedItem | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createSourceTable, setCreateSourceTable] = useState<BatchCommittedItem["source_table"]>("offers_raw");
   const [form, setForm] = useState<FormState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -134,14 +195,25 @@ export function BatchItemsTableEditor({ items }: Props) {
     "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20";
 
   const openEditor = (item: BatchCommittedItem) => {
+    setCreating(false);
     setEditing(item);
     setForm(makeForm(item));
     setError(null);
     setSuccess(null);
   };
 
-  const closeEditor = () => {
+  const openCreator = () => {
     setEditing(null);
+    setCreating(true);
+    setCreateSourceTable("offers_raw");
+    setForm(emptyForm());
+    setError(null);
+    setSuccess(null);
+  };
+
+  const closeModal = () => {
+    setEditing(null);
+    setCreating(false);
     setForm(null);
     setError(null);
     setSaving(false);
@@ -150,61 +222,27 @@ export function BatchItemsTableEditor({ items }: Props) {
   const onSaveChanges = async () => {
     if (!editing || !form) return;
     setError(null);
-    if (!canBatchItemRunSaveAction(editing)) {
-      setError(IMAGE_MISSING_STATUS_MESSAGE);
+    setSuccess(null);
+
+    let patch;
+    try {
+      patch = buildPatch(form);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Neplatná data.");
       return;
-    }
-
-    const priceTotal = toNumberOrNull(form.price_total);
-    const packQty = toNumberOrNull(form.pack_qty);
-    const packUnitQty = toNumberOrNull(form.pack_unit_qty);
-    const priceStandard = toNumberOrNull(form.price_standard);
-    const ppu = toNumberOrNull(form.typical_price_per_unit);
-    const loyalty = toNumberOrNull(form.price_with_loyalty_card);
-
-    const nums = [
-      ["price_total", priceTotal],
-      ["pack_qty", packQty],
-      ["pack_unit_qty", packUnitQty],
-      ["price_standard", priceStandard],
-      ["typical_price_per_unit", ppu],
-      ["price_with_loyalty_card", loyalty],
-    ] as const;
-    for (const [name, value] of nums) {
-      if (Number.isNaN(value)) {
-        setError(`Pole ${name} musí být číslo.`);
-        return;
-      }
     }
 
     setSaving(true);
     try {
-      const payload = {
-        id: editing.id,
-        import_id: editing.import_id,
-        source_table: editing.source_table,
-        patch: {
-          extracted_name: form.extracted_name.trim() || null,
-          price_total: priceTotal,
-          currency: form.currency.trim() || null,
-          pack_qty: packQty,
-          pack_unit: form.pack_unit.trim() || null,
-          pack_unit_qty: packUnitQty,
-          price_standard: priceStandard,
-          typical_price_per_unit: ppu,
-          price_with_loyalty_card: loyalty,
-          has_loyalty_card_price: form.has_loyalty_card_price,
-          notes: form.notes.trim() || null,
-          brand: form.brand.trim() || null,
-          category: form.category.trim() || null,
-          valid_from: form.valid_from || null,
-          valid_to: form.valid_to || null,
-        },
-      };
       const res = await fetch("/api/batches/item", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          id: editing.id,
+          import_id: editing.import_id,
+          source_table: editing.source_table,
+          patch,
+        }),
       });
       const json = (await res.json()) as {
         ok?: boolean;
@@ -227,11 +265,60 @@ export function BatchItemsTableEditor({ items }: Props) {
           )
         );
       }
-      closeEditor();
+      closeModal();
       setSuccess("Položka byla úspěšně uložena.");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Uložení změn selhalo.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onCreateItem = async () => {
+    if (!form) return;
+    setError(null);
+    setSuccess(null);
+
+    let patch;
+    try {
+      patch = buildPatch(form);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Neplatná data.");
+      return;
+    }
+
+    if (!patch.extracted_name) {
+      setError("Pole extracted_name je povinné pro ruční vytvoření položky.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/batches/item", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          import_id: importId,
+          source_table: createSourceTable,
+          patch,
+        }),
+      });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        message?: string;
+        item?: BatchCommittedItem;
+      };
+      if (!res.ok || !json?.ok || !json.item) {
+        throw new Error(json?.error || json?.message || "Vytvoření položky selhalo.");
+      }
+      setRows((prev) => [json.item!, ...prev]);
+      closeModal();
+      setSuccess("Položka byla úspěšně vytvořena.");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Vytvoření položky selhalo.");
     } finally {
       setSaving(false);
     }
@@ -406,184 +493,192 @@ export function BatchItemsTableEditor({ items }: Props) {
         generationRequestedByRow[rowKey] === true
       );
       return (
-      <article
-        key={`${item.source_table}:${item.id}`}
-        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">{cell(item.extracted_name)}</p>
-            <p className="mt-1 text-xs text-slate-600">
-              ID: <span className="font-mono">{cell(item.id)}</span> · import_id:{" "}
-              <span className="font-mono">{cell(item.import_id)}</span> · source_table:{" "}
-              <span className="font-medium">{cell(item.source_table)}</span>
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => openEditor(item)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
-          >
-            Upravit položku
-          </button>
-        </div>
-
-        <dl className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="sm:col-span-2 lg:col-span-3">
-            <dt className="text-xs text-slate-500">Stav obrázku</dt>
-            <dd className="mt-1">
-              {imageState.hasValidImage ? (
-                <span className="inline-flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
-                    image_key: {imageState.resolvedImageKey}
-                  </span>
-                  <img
-                    src={getProductTypeImageUrl(imageState.resolvedImageKey)}
-                    alt=""
-                    className="h-12 w-12 rounded-lg object-contain ring-1 ring-slate-200"
-                  />
-                </span>
-              ) : (
-                <span className="inline-flex items-center rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900">
-                  {imageState.imageStatusMessage}
-                </span>
-              )}
-            </dd>
-          </div>
-          {missingAssetState.showMissingAssetCta ? (
-            <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
-              <p className="text-sm font-semibold text-amber-900">{missingAssetState.title}</p>
-              <p className="mt-1 text-xs text-amber-900/90">{missingAssetState.message}</p>
-              <p className="mt-2 text-xs text-amber-900/90">
-                Níže v sekci „Image review akce“ vyber katalogový image key a klikni na{" "}
-                <strong>Manual override</strong> — hodnota se uloží do databáze (pole{" "}
-                <code className="rounded bg-amber-100/80 px-1">approved_image_key</code>).
+        <article
+          key={`${item.source_table}:${item.id}`}
+          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{cell(item.extracted_name)}</p>
+              <p className="mt-1 text-xs text-slate-600">
+                ID: <span className="font-mono">{cell(item.id)}</span> · import_id:{" "}
+                <span className="font-mono">{cell(item.import_id)}</span> · source_table:{" "}
+                <span className="font-medium">{cell(item.source_table)}</span>
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
+            </div>
+            <button
+              type="button"
+              onClick={() => openEditor(item)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+            >
+              Upravit položku
+            </button>
+          </div>
+
+          <dl className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="sm:col-span-2 lg:col-span-3">
+              <dt className="text-xs text-slate-500">Stav obrázku</dt>
+              <dd className="mt-1">
+                {imageState.hasValidImage ? (
+                  <span className="inline-flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
+                      image_key: {imageState.resolvedImageKey}
+                    </span>
+                    <img
+                      src={getProductTypeImageUrl(imageState.resolvedImageKey)}
+                      alt=""
+                      className="h-12 w-12 rounded-lg object-contain ring-1 ring-slate-200"
+                    />
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900">
+                    {imageState.imageStatusMessage}
+                  </span>
+                )}
+              </dd>
+            </div>
+            {missingAssetState.showMissingAssetCta ? (
+              <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
+                <p className="text-sm font-semibold text-amber-900">{missingAssetState.title}</p>
+                <p className="mt-1 text-xs text-amber-900/90">{missingAssetState.message}</p>
+                <p className="mt-2 text-xs text-amber-900/90">
+                  Níže v sekci „Image review akce“ vyber katalogový image key a klikni na{" "}
+                  <strong>Manual override</strong> — hodnota se uloží do databáze (pole{" "}
+                  <code className="rounded bg-amber-100/80 px-1">approved_image_key</code>).
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onRequestImageGeneration(item)}
+                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800"
+                  >
+                    Generuj obrázek
+                  </button>
+                  {missingAssetState.showGenerationRequested ? (
+                    <span className="text-xs text-indigo-700">Požadavek na generování zaznamenán.</span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+            <div className="sm:col-span-2 lg:col-span-3">
+              <dt className="text-xs text-slate-500">Image review akce</dt>
+              <dd className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => onRequestImageGeneration(item)}
-                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800"
+                  onClick={() => void onImageReviewAction(item, "approve")}
+                  disabled={reviewSavingKey === rowKeyOf(item) || !imageState.hasValidImage}
+                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Generuj obrázek
+                  Approve
                 </button>
-                {missingAssetState.showGenerationRequested ? (
-                  <span className="text-xs text-indigo-700">Požadavek na generování zaznamenán.</span>
+                <button
+                  type="button"
+                  onClick={() => void onImageReviewAction(item, "reject")}
+                  disabled={reviewSavingKey === rowKeyOf(item)}
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Reject
+                </button>
+                <select
+                  value={manualOverrideByRow[rowKeyOf(item)] ?? imageState.resolvedImageKey ?? ""}
+                  onChange={(e) =>
+                    setManualOverrideByRow((prev) => ({
+                      ...prev,
+                      [rowKeyOf(item)]: e.target.value,
+                    }))
+                  }
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
+                >
+                  <option value="">Vyber image key</option>
+                  {imageKeys.map((key) => (
+                    <option key={key} value={key}>
+                      {key}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void onImageReviewAction(item, "manual_override")}
+                  disabled={reviewSavingKey === rowKey || !selectedManualKeyValid}
+                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Manual override
+                </button>
+                <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) onUploadProductTypeImageForRow(item, file);
+                    }}
+                  />
+                  Nahrát do úložiště
+                </label>
+                {selectedManualKeyValid ? (
+                  <img
+                    src={getProductTypeImageUrl(selectedManualKey)}
+                    alt=""
+                    className="h-8 w-8 rounded object-contain ring-1 ring-slate-200"
+                  />
                 ) : null}
-              </div>
+                <span className="text-xs text-slate-500">
+                  status: {item.image_review_status ?? "—"}
+                </span>
+              </dd>
             </div>
-          ) : null}
-          <div className="sm:col-span-2 lg:col-span-3">
-            <dt className="text-xs text-slate-500">Image review akce</dt>
-            <dd className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void onImageReviewAction(item, "approve")}
-                disabled={reviewSavingKey === rowKeyOf(item) || !imageState.hasValidImage}
-                className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Approve
-              </button>
-              <button
-                type="button"
-                onClick={() => void onImageReviewAction(item, "reject")}
-                disabled={reviewSavingKey === rowKeyOf(item)}
-                className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Reject
-              </button>
-              <select
-                value={manualOverrideByRow[rowKeyOf(item)] ?? imageState.resolvedImageKey ?? ""}
-                onChange={(e) =>
-                  setManualOverrideByRow((prev) => ({
-                    ...prev,
-                    [rowKeyOf(item)]: e.target.value,
-                  }))
-                }
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
-              >
-                <option value="">Vyber image key</option>
-                {imageKeys.map((key) => (
-                  <option key={key} value={key}>
-                    {key}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => void onImageReviewAction(item, "manual_override")}
-                disabled={reviewSavingKey === rowKey || !selectedManualKeyValid}
-                className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Manual override
-              </button>
-              <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) onUploadProductTypeImageForRow(item, file);
-                  }}
-                />
-                Nahrát do úložiště
-              </label>
-              {selectedManualKeyValid ? (
-                <img
-                  src={getProductTypeImageUrl(selectedManualKey)}
-                  alt=""
-                  className="h-8 w-8 rounded object-contain ring-1 ring-slate-200"
-                />
-              ) : null}
-              <span className="text-xs text-slate-500">
-                status: {item.image_review_status ?? "—"}
-              </span>
-            </dd>
-          </div>
-          <div><dt className="text-xs text-slate-500">Brand</dt><dd>{cell(item.brand)}</dd></div>
-          <div><dt className="text-xs text-slate-500">Kategorie</dt><dd>{cell(item.category)}</dd></div>
-          <div>
-            <dt className="text-xs text-slate-500">Cena</dt>
-            <dd>{item.price_total != null ? `${item.price_total} ${item.currency ?? ""}`.trim() : "—"}</dd>
-          </div>
-          <div><dt className="text-xs text-slate-500">Měna</dt><dd>{cell(item.currency)}</dd></div>
-          <div><dt className="text-xs text-slate-500">Loyalty cena</dt><dd>{cell(item.price_with_loyalty_card)}</dd></div>
-          <div><dt className="text-xs text-slate-500">Pack qty</dt><dd>{cell(item.pack_qty)}</dd></div>
-          <div><dt className="text-xs text-slate-500">Pack unit</dt><dd>{cell(item.pack_unit)}</dd></div>
-          <div><dt className="text-xs text-slate-500">Pack unit qty</dt><dd>{cell(item.pack_unit_qty)}</dd></div>
-          <div><dt className="text-xs text-slate-500">Price standard</dt><dd>{cell(item.price_standard)}</dd></div>
-          <div><dt className="text-xs text-slate-500">Typical/unit</dt><dd>{cell(item.typical_price_per_unit)}</dd></div>
-          <div><dt className="text-xs text-slate-500">Valid from</dt><dd>{cell(item.valid_from)}</dd></div>
-          <div><dt className="text-xs text-slate-500">Valid to</dt><dd>{cell(item.valid_to)}</dd></div>
-          <div className="sm:col-span-2 lg:col-span-3">
-            <dt className="text-xs text-slate-500">Poznámky</dt>
-            <dd>{cell(item.notes)}</dd>
-          </div>
-          <div><dt className="text-xs text-slate-500">Vytvořeno</dt><dd>{prettyDateTime(item.created_at)}</dd></div>
-        </dl>
-      </article>
+            <div><dt className="text-xs text-slate-500">Brand</dt><dd>{cell(item.brand)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Kategorie</dt><dd>{cell(item.category)}</dd></div>
+            <div>
+              <dt className="text-xs text-slate-500">Cena</dt>
+              <dd>{item.price_total != null ? `${item.price_total} ${item.currency ?? ""}`.trim() : "—"}</dd>
+            </div>
+            <div><dt className="text-xs text-slate-500">Měna</dt><dd>{cell(item.currency)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Loyalty cena</dt><dd>{cell(item.price_with_loyalty_card)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Pack qty</dt><dd>{cell(item.pack_qty)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Pack unit</dt><dd>{cell(item.pack_unit)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Pack unit qty</dt><dd>{cell(item.pack_unit_qty)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Price standard</dt><dd>{cell(item.price_standard)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Typical/unit</dt><dd>{cell(item.typical_price_per_unit)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Valid from</dt><dd>{cell(item.valid_from)}</dd></div>
+            <div><dt className="text-xs text-slate-500">Valid to</dt><dd>{cell(item.valid_to)}</dd></div>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <dt className="text-xs text-slate-500">Poznámky</dt>
+              <dd>{cell(item.notes)}</dd>
+            </div>
+            <div><dt className="text-xs text-slate-500">Vytvořeno</dt><dd>{prettyDateTime(item.created_at)}</dd></div>
+          </dl>
+        </article>
       );
     });
 
-  const editingImageState = editing ? resolveBatchItemImageState(editing) : null;
-  const saveBlockedByImage = editing ? !canBatchItemRunSaveAction(editing) : false;
-  const editingRowKey = editing ? rowKeyOf(editing) : null;
-  const editingMissingAssetState = editingImageState
+  const modalTitle = creating ? "Přidat položku" : `Upravit položku (${editing?.source_table})`;
+  const modalImageState = editing ? resolveBatchItemImageState(editing) : null;
+  const editingMissingAssetState = editing
     ? getMissingAssetWorkflowState(
-        editingImageState,
-        editingRowKey ? generationRequestedByRow[editingRowKey] === true : false
+        modalImageState!,
+        generationRequestedByRow[rowKeyOf(editing)] === true
       )
     : null;
 
   return (
     <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_4px_24px_rgba(15,23,42,0.06)]">
-      <div>
-        <h2 className="text-xl font-semibold text-slate-900">Seznam portovaných produktů</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Všechny položky uložené v Supabase pro tuto dávku ({rows.length} celkem).
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Seznam portovaných produktů</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Všechny položky uložené v Supabase pro tuto dávku ({rows.length} celkem).
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={openCreator}
+          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+        >
+          Přidat položku
+        </button>
       </div>
 
       {success ? (
@@ -599,57 +694,61 @@ export function BatchItemsTableEditor({ items }: Props) {
 
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500">Pro tento import zatím nejsou uložené žádné položky.</p>
-      ) : <div className="space-y-3">{renderRows(bySource.raw)}{renderRows(bySource.quarantine)}</div>}
+      ) : (
+        <div className="grid gap-4">
+          {renderRows(bySource.raw)}
+          {renderRows(bySource.quarantine)}
+        </div>
+      )}
 
-      {editing && form ? (
+      {(editing || creating) && form ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/40"
             aria-label="Zavřít"
-            onClick={closeEditor}
+            onClick={closeModal}
           />
-          <div className="relative z-10 w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-            <h3 className="text-lg font-semibold text-slate-900">Upravit položku</h3>
-            <p className="mt-1 text-xs text-slate-500">
-              ID: {editing.id} · import_id: {editing.import_id} · source_table: {editing.source_table}
-            </p>
-            <div className="mt-3 max-h-[55vh] overflow-y-auto pr-1">
-            {editingImageState?.imageMissing ? (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
-                <p className="text-sm font-semibold text-amber-900">{editingMissingAssetState?.title}</p>
-                <p className="mt-1 text-sm text-amber-900">{editingMissingAssetState?.message}</p>
+          <div className="relative z-10 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">{modalTitle}</h3>
+            {editing ? <p className="mt-1 text-xs text-slate-500">ID: {editing.id}</p> : null}
+
+            {creating ? (
+              <label className="mt-3 block text-sm text-slate-700">
+                source_table
+                <select
+                  className={field}
+                  value={createSourceTable}
+                  onChange={(e) => setCreateSourceTable(e.target.value as BatchCommittedItem["source_table"])}
+                >
+                  <option value="offers_raw">offers_raw</option>
+                  <option value="offers_quarantine">offers_quarantine</option>
+                </select>
+              </label>
+            ) : null}
+
+            {editing && modalImageState?.imageMissing ? (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <p className="font-semibold">{editingMissingAssetState?.title ?? IMAGE_MISSING_STATUS_MESSAGE}</p>
+                <p className="mt-1">{editingMissingAssetState?.message ?? IMAGE_MISSING_STATUS_MESSAGE}</p>
                 <p className="mt-2 text-xs text-amber-900/90">
-                  Po zavření modalu použij v řádku položky sekci „Image review akce“: vyber katalogový key a{" "}
-                  <strong>Manual override</strong>.
+                  Položku můžeš uložit i bez obrázku. Obrázek doplň později přes „Image review akce“.
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onRequestImageGeneration(editing)}
-                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800"
-                  >
-                    Generuj obrázek
-                  </button>
-                  {editingMissingAssetState?.showGenerationRequested ? (
-                    <span className="text-xs text-indigo-700">Požadavek na generování zaznamenán.</span>
-                  ) : null}
-                </div>
               </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
+            ) : editing ? (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
                 <p className="text-xs text-emerald-700">
-                  image_key: {editingImageState?.resolvedImageKey}
+                  image_key: {modalImageState?.resolvedImageKey}
                 </p>
-                {editingImageState?.resolvedImageKey ? (
+                {modalImageState?.resolvedImageKey ? (
                   <img
-                    src={getProductTypeImageUrl(editingImageState.resolvedImageKey)}
+                    src={getProductTypeImageUrl(modalImageState.resolvedImageKey)}
                     alt=""
                     className="h-14 w-14 rounded-lg object-contain ring-1 ring-slate-200"
                   />
                 ) : null}
               </div>
-            )}
+            ) : null}
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="text-sm text-slate-700">
@@ -708,9 +807,7 @@ export function BatchItemsTableEditor({ items }: Props) {
                 <input
                   type="checkbox"
                   checked={form.has_loyalty_card_price}
-                  onChange={(e) =>
-                    setForm({ ...form, has_loyalty_card_price: e.target.checked })
-                  }
+                  onChange={(e) => setForm({ ...form, has_loyalty_card_price: e.target.checked })}
                 />
                 has_loyalty_card_price
               </label>
@@ -719,23 +816,22 @@ export function BatchItemsTableEditor({ items }: Props) {
                 <textarea className={field} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} />
               </label>
             </div>
-            </div>
 
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={closeEditor}
+                onClick={closeModal}
                 className="rounded-xl px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
               >
                 Zavřít
               </button>
               <button
                 type="button"
-                onClick={onSaveChanges}
-                disabled={saving || saveBlockedByImage}
+                onClick={creating ? onCreateItem : onSaveChanges}
+                disabled={saving}
                 className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? "Ukládám..." : saveBlockedByImage ? "Uložit změny (vyžaduje validní obrázek)" : "Uložit změny"}
+                {saving ? "Ukládám..." : creating ? "Vytvořit položku" : "Uložit změny"}
               </button>
             </div>
           </div>
