@@ -3,9 +3,7 @@ import { QuarantineListError } from "@/components/quarantine/quarantine-list-err
 import { QuarantineDbEmpty } from "@/components/quarantine/quarantine-db-empty";
 import { QuarantineDbNotConfigured } from "@/components/quarantine/quarantine-db-not-configured";
 import { listQuarantine } from "@/lib/quarantine/list-quarantine";
-import { loadAdminDataSnapshot } from "@/lib/observability/data-snapshot";
-import { countQuarantineOpenRows } from "@/lib/quarantine/quarantine-table-counts";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { isQuarantineRowOpenInDefaultList } from "@/lib/quarantine/quarantine-list-open";
 
 export const dynamic = "force-dynamic";
 
@@ -21,20 +19,12 @@ export default async function QuarantinePage() {
       return <QuarantineDbEmpty />;
     }
 
-    let dbCounts: { open: number; total: number } | null = null;
-    const supabase = getSupabaseAdmin();
-    if (supabase) {
-      const [snap, openRes] = await Promise.all([
-        loadAdminDataSnapshot(supabase),
-        countQuarantineOpenRows(supabase),
-      ]);
-      if (snap.ok && openRes.ok) {
-        dbCounts = {
-          total: snap.snapshot.totals.quarantined_offers,
-          open: openRes.open,
-        };
-      }
-    }
+    const dbCounts = {
+      total: res.items.length,
+      open: res.items.filter((item) =>
+        isQuarantineRowOpenInDefaultList(item.quarantine_reason)
+      ).length,
+    };
     return <QuarantineClient items={res.items} dbCounts={dbCounts} />;
   }
 

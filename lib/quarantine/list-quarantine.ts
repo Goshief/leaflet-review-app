@@ -21,6 +21,8 @@ export type QuarantineRow = {
   notes: string | null;
   brand: string | null;
   category: string | null;
+  image_key?: string | null;
+  approved_image_key?: string | null;
   quarantine_reason: string | null;
   created_at: string;
 };
@@ -134,4 +136,3 @@ export async function listQuarantine(): Promise<ListQuarantineResult> {
 
   return { ok: true, configured: true, items };
 }
-

@@ -266,9 +266,6 @@ export function LocalDashboard() {
         ...derived.alerts,
       ]}
       today={derived.today}
-      window_30d={derived.window_30d}
-      table_counts={derived.table_counts}
-      queryFailed={false}
       trend_7d={derived.trend_7d}
       trend_30d={derived.trend_30d}
       dominance_inserted={derived.dominance_inserted}
@@ -281,4 +278,3 @@ export function LocalDashboard() {
     />
   );
 }
-

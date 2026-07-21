@@ -38,7 +38,7 @@ export type BatchCommittedItem = {
 
 type Props = {
   items: BatchCommittedItem[];
-  importId: string;
+  importId?: string;
 };
 
 type FormState = {
@@ -277,6 +277,10 @@ export function BatchItemsTableEditor({ items, importId }: Props) {
 
   const onCreateItem = async () => {
     if (!form) return;
+    if (!importId) {
+      setError("Novou položku lze přidat až po otevření konkrétní dávky.");
+      return;
+    }
     setError(null);
     setSuccess(null);
 
@@ -672,13 +676,15 @@ export function BatchItemsTableEditor({ items, importId }: Props) {
             Všechny položky uložené v Supabase pro tuto dávku ({rows.length} celkem).
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreator}
-          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-        >
-          Přidat položku
-        </button>
+        {importId ? (
+          <button
+            type="button"
+            onClick={openCreator}
+            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+          >
+            Přidat položku
+          </button>
+        ) : null}
       </div>
 
       {success ? (
