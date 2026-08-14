@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   evaluateAccess,
@@ -5,14 +6,22 @@ import {
   type GuardDeps,
 } from "./guards";
 import { getAuthenticatedActor, type AuthenticatedActor } from "./actor";
-import { resolveSafeNextPath } from "./safe-next-path";
+import {
+  LEAFLET_PATHNAME_HEADER,
+  resolveLoginNextPath,
+} from "./request-path";
+
+async function resolveNextPath(fallbackPath: string): Promise<string> {
+  const h = await headers();
+  return resolveLoginNextPath(h.get(LEAFLET_PATHNAME_HEADER), fallbackPath);
+}
 
 async function requirePageRole(
   need: "operator" | "admin",
-  nextPath: string,
+  fallbackPath: string,
   deps?: GuardDeps
 ): Promise<AuthenticatedActor> {
-  const safeNext = resolveSafeNextPath(nextPath, "/");
+  const safeNext = await resolveNextPath(fallbackPath);
   const client = await resolveGuardClient(deps);
   const actor = await getAuthenticatedActor(client);
   const result = evaluateAccess(actor, need);
@@ -28,16 +37,16 @@ async function requirePageRole(
 
 /** Server page/layout guard for operator-or-admin routes. */
 export async function requireOperatorPage(
-  nextPath: string,
+  fallbackPath: string,
   deps?: GuardDeps
 ): Promise<AuthenticatedActor> {
-  return requirePageRole("operator", nextPath, deps);
+  return requirePageRole("operator", fallbackPath, deps);
 }
 
 /** Server page/layout guard for admin-only routes. */
 export async function requireAdminPage(
-  nextPath: string,
+  fallbackPath: string,
   deps?: GuardDeps
 ): Promise<AuthenticatedActor> {
-  return requirePageRole("admin", nextPath, deps);
+  return requirePageRole("admin", fallbackPath, deps);
 }

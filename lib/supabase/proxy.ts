@@ -1,12 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnv } from "@/lib/supabase/public-env";
+import { LEAFLET_PATHNAME_HEADER } from "@/lib/auth/request-path";
 
 const SESSION_CACHE_HEADERS: Record<string, string> = {
   "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0",
   Expires: "0",
   Pragma: "no-cache",
 };
+
+function nextWithPathname(request: NextRequest): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  const pathWithSearch = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  requestHeaders.set(LEAFLET_PATHNAME_HEADER, pathWithSearch);
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+}
 
 /**
  * Refresh / verify the Auth session for the current request.
@@ -15,11 +27,12 @@ const SESSION_CACHE_HEADERS: Record<string, string> = {
  * Definitive operator/admin authorization runs in page layouts and each
  * sensitive API Route Handler via requireOperatorApi / requireAdminApi —
  * Proxy is not the sole authorization layer and does not re-fetch the Auth user.
+ *
+ * Also forwards the request path via x-leaflet-pathname so page guards can
+ * preserve deep links in /login?next=...
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
+  let supabaseResponse = nextWithPathname(request);
 
   const env = getPublicSupabaseEnv();
   if (!env) {
@@ -35,9 +48,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
         cookiesToSet.forEach(({ name, value }) => {
           request.cookies.set(name, value);
         });
-        supabaseResponse = NextResponse.next({
-          request,
-        });
+        supabaseResponse = nextWithPathname(request);
         cookiesToSet.forEach(({ name, value, options }) => {
           supabaseResponse.cookies.set(name, value, options);
         });

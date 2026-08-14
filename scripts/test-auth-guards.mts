@@ -15,8 +15,11 @@ import {
   requireAdminApi,
 } from "../lib/auth/guards.ts";
 import { getAuthenticatedActor } from "../lib/auth/actor.ts";
+import {
+  LEAFLET_PATHNAME_HEADER,
+  resolveLoginNextPath,
+} from "../lib/auth/request-path.ts";
 import { resolveSafeNextPath } from "../lib/auth/safe-next-path.ts";
-
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function readSrc(rel: string): string {
@@ -188,6 +191,21 @@ async function main() {
     const next = resolveSafeNextPath("/batches");
     assert.equal(next, "/batches");
     assert.equal(resolveSafeNextPath("https://evil.example"), "/");
+
+    // Deep-link preservation: live path wins over section fallback
+    assert.equal(
+      resolveLoginNextPath("/batches/abc-123", "/batches"),
+      "/batches/abc-123"
+    );
+    assert.equal(
+      resolveLoginNextPath("/quarantine/local?tab=open", "/quarantine"),
+      "/quarantine/local?tab=open"
+    );
+    assert.equal(resolveLoginNextPath(null, "/batches"), "/batches");
+    assert.equal(
+      resolveLoginNextPath("https://attacker.example", "/batches"),
+      "/batches"
+    );
   }
 
   // 13) login / logout / forbidden are public (no operator required in matrix)
@@ -204,12 +222,15 @@ async function main() {
   }
 
   // 14) Proxy keeps session-only contract (no role getUser authorization)
+  //     and forwards pathname for deep-link login redirects
   {
     const proxyHelper = readSrc("lib/supabase/proxy.ts");
     assert.match(proxyHelper, /getClaims/);
     assert.equal(/getUser\s*\(/.test(proxyHelper), false);
     assert.match(proxyHelper, /Definitive operator\/admin authorization|requireOperatorApi/);
     assert.match(proxyHelper, /Cache-Control|SESSION_CACHE_HEADERS/);
+    assert.match(proxyHelper, new RegExp(LEAFLET_PATHNAME_HEADER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(readSrc("lib/auth/page-guards.ts"), /resolveLoginNextPath|LEAFLET_PATHNAME_HEADER/);
   }
 
   // 15–16) guard before service-role / AI in representative handlers
