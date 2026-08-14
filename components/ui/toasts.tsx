@@ -25,7 +25,6 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 function id() {
   try {
-    // eslint-disable-next-line no-undef
     return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now());
   } catch {
     return String(Date.now());

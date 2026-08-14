@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { RowReviewStatus } from "@/components/review/product-cards";
+import type { RowReason, RowReviewStatus } from "@/components/review/product-cards";
+import type { ReviewOfferRow } from "@/components/review/offers-table";
 import { reviewQuarantineHref } from "@/lib/nav/quarantine";
 
-type ReviewOfferRow = any;
 type ReviewStateEntry = {
   offers?: ReviewOfferRow[]; // legacy
   rowStatus?: Record<number, RowReviewStatus | undefined>; // legacy
   offersByPage?: Record<string, ReviewOfferRow[]>;
   rowStatusByPage?: Record<string, Record<number, RowReviewStatus | undefined>>;
-  rowReasonByPage?: Record<string, Record<number, any>>;
+  rowReasonByPage?: Record<string, Record<number, RowReason | undefined>>;
   updated_at?: string;
   resume_url?: string | null;
 };
@@ -77,14 +77,16 @@ export function LocalQuarantine() {
           const st = (s.state.rowStatusByPage ?? {})[pStr] ?? {};
           const rr = (s.state.rowReasonByPage ?? {})[pStr] ?? {};
           for (let i = 0; i < (arr ?? []).length; i++) {
-            const status = (st as any)[i] ?? "pending";
+            const status = String(st[i] ?? "pending");
             const migrated = status === "quarantined" ? "quarantine" : status;
             if (migrated !== "quarantine") continue;
-            const o = (arr as any[])[i] ?? {};
-            const r = (rr as any)[i] ?? null;
+            const o = arr[i] ?? ({} as ReviewOfferRow);
+            const r = rr[i] ?? null;
             const reason =
               r && typeof r === "object"
-                ? [r.kind, r.code, r.detail].filter((x: any) => (x ?? "").toString().trim()).join(":")
+                ? [r.kind, r.code, r.detail]
+                    .filter((x) => (x ?? "").toString().trim())
+                    .join(":")
                 : null;
             const resumeHref = (() => {
               const p = new URLSearchParams("tab=quarantine&filter=quarantine");
@@ -107,12 +109,12 @@ export function LocalQuarantine() {
         continue;
       }
       const legacy = Array.isArray(s.state.offers) ? s.state.offers : [];
-      const st = (s.state.rowStatus ?? {}) as any;
+      const st = s.state.rowStatus ?? {};
       for (let i = 0; i < legacy.length; i++) {
-        const status = st[i] ?? "pending";
+        const status = String(st[i] ?? "pending");
         const migrated = status === "quarantined" ? "quarantine" : status;
         if (migrated !== "quarantine") continue;
-        const o = legacy[i] ?? {};
+        const o = legacy[i] ?? ({} as ReviewOfferRow);
         const resumeHref = (() => {
           const p = new URLSearchParams("tab=quarantine&filter=quarantine");
           p.set("resume_key", internalKey);

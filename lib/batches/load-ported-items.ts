@@ -49,7 +49,7 @@ async function loadOneTable<T extends Record<string, unknown>>(args: {
     return q.limit(limit);
   };
 
-  let res = build(true);
+  const res = build(true);
   if (!res) {
     return { data: [], error: "missing import filter", count: null };
   }

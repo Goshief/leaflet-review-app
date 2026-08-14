@@ -25,26 +25,31 @@ class FakeGenerationSupabase implements SupabaseGenerationRequestClient {
     this.rows = [...seed];
   }
 
-  from(_table: string) {
-    const self = this;
+  from = (table: string) => {
+    void table;
     const filters: Record<string, string> = {};
     let isInsert = false;
     let insertPayload: Record<string, unknown> | null = null;
 
     const query = {
-      select(_columns: string) {
+      select(columns: string) {
+        void columns;
         return query;
       },
       eq(column: string, value: string) {
         filters[column] = value;
         return query;
       },
-      order(_column: string, _options: { ascending: boolean }) {
+      order(column: string, options: { ascending: boolean }) {
+        void column;
+        void options;
         return query;
       },
-      async limit(value: number) {
-        const list = self.rows.filter((r) =>
-          Object.entries(filters).every(([k, v]) => String((r as unknown as Record<string, unknown>)[k]) === v)
+      limit: async (value: number) => {
+        const list = this.rows.filter((r) =>
+          Object.entries(filters).every(
+            ([k, v]) => String((r as unknown as Record<string, unknown>)[k]) === v
+          )
         );
         return { data: list.slice(0, value), error: null };
       },
@@ -55,10 +60,10 @@ class FakeGenerationSupabase implements SupabaseGenerationRequestClient {
       },
       maybeSingle: async () => {
         if (!isInsert) return { data: null, error: { message: "not insert mode" } };
-        if (self.failInsert) return { data: null, error: { message: "insert failed" } };
+        if (this.failInsert) return { data: null, error: { message: "insert failed" } };
         const now = new Date().toISOString();
         const row: ReqRow = {
-          id: `req-${self.rows.length + 1}`,
+          id: `req-${this.rows.length + 1}`,
           batch_item_id: String(insertPayload?.batch_item_id),
           import_id: String(insertPayload?.import_id),
           source_table: (insertPayload?.source_table as ReqRow["source_table"]) ?? "offers_raw",
@@ -68,13 +73,13 @@ class FakeGenerationSupabase implements SupabaseGenerationRequestClient {
           status: (insertPayload?.status as ReqRow["status"]) ?? "pending",
           created_at: now,
         };
-        self.rows.push(row);
+        this.rows.push(row);
         return { data: row, error: null };
       },
     };
 
     return query;
-  }
+  };
 }
 
 // parse payload

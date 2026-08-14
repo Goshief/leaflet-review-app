@@ -72,7 +72,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
-    const payload = (rows ?? []) as any[];
+    type QuarantineOfferRow = {
+      import_id?: string | null;
+      store_id?: string | null;
+      source_type?: string | null;
+      source_url?: string | null;
+      valid_from?: string | null;
+      valid_to?: string | null;
+      extracted_name?: string | null;
+      price_total?: number | null;
+      currency?: string | null;
+      pack_qty?: number | null;
+      pack_unit?: string | null;
+      pack_unit_qty?: number | null;
+      price_standard?: number | null;
+      typical_price_per_unit?: number | null;
+      price_with_loyalty_card?: number | null;
+      has_loyalty_card_price?: boolean | null;
+      notes?: string | null;
+      brand?: string | null;
+      category?: string | null;
+    };
+
+    const payload = (rows ?? []) as QuarantineOfferRow[];
     if (payload.length === 0) {
       return NextResponse.json({ ok: true, moved: 0 });
     }

@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const BUCKET = 'product-types'
 
@@ -51,9 +53,12 @@ export default function ProductTypesGalleryPage() {
                 padding: 12,
               }}
             >
-              <img
+              <Image
                 src={url}
                 alt={file}
+                width={280}
+                height={140}
+                unoptimized
                 style={{ width: '100%', height: 140, objectFit: 'contain' }}
                 onError={(e) => {
                   const target = e.currentTarget

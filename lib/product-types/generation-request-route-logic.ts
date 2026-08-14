@@ -34,16 +34,6 @@ export type ParsedGenerationRequestUpdate = {
   applyToBatchItem: boolean;
 };
 
-type QueryResult<T> = {
-  data: T | null;
-  error: { message?: string } | null;
-};
-
-type InsertResult<T> = {
-  data: T | null;
-  error: { message?: string } | null;
-};
-
 type RequestRow = {
   id: string;
   batch_item_id: string;
@@ -61,11 +51,28 @@ type RequestRow = {
 
 export type SupabaseGenerationRequestClient = {
   from(table: string): {
-    select(columns: string): any;
-    insert(payload: Record<string, unknown>): any;
-    update(payload: Record<string, unknown>): any;
+    select(columns: string): unknown;
+    insert(payload: Record<string, unknown>): unknown;
+    update(payload: Record<string, unknown>): unknown;
   };
 };
+
+type QueryError = { message?: string } | null;
+
+type ListResult = PromiseLike<{ data: unknown; error: QueryError }>;
+type SingleResult = PromiseLike<{ data: unknown; error: QueryError }>;
+
+type GenerationQuery = {
+  select(columns: string): GenerationQuery;
+  eq(column: string, value: string): GenerationQuery;
+  order(column: string, options: { ascending: boolean }): GenerationQuery;
+  limit(value: number): GenerationQuery & ListResult;
+  maybeSingle(): SingleResult;
+} & ListResult;
+
+function asGenerationQuery(value: unknown): GenerationQuery {
+  return value as GenerationQuery;
+}
 
 export const GENERATION_REQUEST_MISSING_MESSAGE =
   "Nepodařilo se uložit požadavek na generování obrázku.";
@@ -137,11 +144,13 @@ export async function listGenerationRequests(
   supabase: SupabaseGenerationRequestClient,
   limit = 200
 ) {
-  const result = await supabase
-    .from("product_type_generation_requests")
-    .select(
-      "id, batch_item_id, import_id, source_table, product_name, candidate_image_key, source, status, resolved_image_key, error_note, created_at, updated_at"
-    )
+  const result = await asGenerationQuery(
+    supabase
+      .from("product_type_generation_requests")
+      .select(
+        "id, batch_item_id, import_id, source_table, product_name, candidate_image_key, source, status, resolved_image_key, error_note, created_at, updated_at"
+      )
+  )
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -160,11 +169,13 @@ export async function createOrReuseGenerationRequest(
   supabase: SupabaseGenerationRequestClient,
   req: ParsedGenerationRequest
 ) {
-  const existing = await supabase
-    .from("product_type_generation_requests")
-    .select(
-      "id, batch_item_id, import_id, source_table, product_name, candidate_image_key, source, status, resolved_image_key, error_note, created_at, updated_at"
-    )
+  const existing = await asGenerationQuery(
+    supabase
+      .from("product_type_generation_requests")
+      .select(
+        "id, batch_item_id, import_id, source_table, product_name, candidate_image_key, source, status, resolved_image_key, error_note, created_at, updated_at"
+      )
+  )
     .eq("batch_item_id", req.batchItemId)
     .eq("import_id", req.importId)
     .eq("source_table", req.sourceTable)
@@ -176,14 +187,13 @@ export async function createOrReuseGenerationRequest(
   if (existing.error) {
     return { ok: false as const, status: 500, error: existing.error.message ?? GENERATION_REQUEST_MISSING_MESSAGE };
   }
-  const existingList = (existing.data as unknown as RequestRow[] | null) ?? null;
+  const existingList = (existing.data as RequestRow[] | null) ?? null;
   if (existingList && existingList.length > 0) {
     return { ok: true as const, created: false, request: existingList[0] };
   }
 
-  const inserted = await supabase
-    .from("product_type_generation_requests")
-    .insert({
+  const inserted = await asGenerationQuery(
+    supabase.from("product_type_generation_requests").insert({
       batch_item_id: req.batchItemId,
       import_id: req.importId,
       source_table: req.sourceTable,
@@ -192,6 +202,7 @@ export async function createOrReuseGenerationRequest(
       source: req.source,
       status: "pending",
     })
+  )
     .select(
       "id, batch_item_id, import_id, source_table, product_name, candidate_image_key, source, status, resolved_image_key, error_note, created_at, updated_at"
     )
@@ -205,7 +216,7 @@ export async function createOrReuseGenerationRequest(
     };
   }
 
-  return { ok: true as const, created: true, request: inserted.data };
+  return { ok: true as const, created: true, request: inserted.data as RequestRow };
 }
 
 export async function updateGenerationRequestLifecycle(
@@ -215,11 +226,13 @@ export async function updateGenerationRequestLifecycle(
     isValidImageKey: (key: string | null | undefined) => boolean;
   }
 ) {
-  const current = await supabase
-    .from("product_type_generation_requests")
-    .select(
-      "id, batch_item_id, import_id, source_table, product_name, candidate_image_key, source, status, resolved_image_key, error_note, created_at, updated_at"
-    )
+  const current = await asGenerationQuery(
+    supabase
+      .from("product_type_generation_requests")
+      .select(
+        "id, batch_item_id, import_id, source_table, product_name, candidate_image_key, source, status, resolved_image_key, error_note, created_at, updated_at"
+      )
+  )
     .eq("id", update.id)
     .maybeSingle();
 
@@ -253,9 +266,9 @@ export async function updateGenerationRequestLifecycle(
     error_note: update.status === "error" ? update.errorNote : null,
   };
 
-  const saved = await supabase
-    .from("product_type_generation_requests")
-    .update(nextPayload)
+  const saved = await asGenerationQuery(
+    supabase.from("product_type_generation_requests").update(nextPayload)
+  )
     .eq("id", update.id)
     .select(
       "id, batch_item_id, import_id, source_table, product_name, candidate_image_key, source, status, resolved_image_key, error_note, created_at, updated_at"
@@ -274,12 +287,12 @@ export async function updateGenerationRequestLifecycle(
   // Not fully atomic: request row may already be updated if this step fails.
   // Full atomicity requires a later transactional RPC.
   if (update.status === "done" && update.applyToBatchItem && update.resolvedImageKey) {
-    const batchUpdate = await supabase
-      .from(row.source_table)
-      .update({
+    const batchUpdate = await asGenerationQuery(
+      supabase.from(row.source_table).update({
         approved_image_key: update.resolvedImageKey,
         image_review_status: "manual_override",
       })
+    )
       .eq("id", row.batch_item_id)
       .eq("import_id", row.import_id)
       .maybeSingle();

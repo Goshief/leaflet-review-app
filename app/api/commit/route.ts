@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 
   // V tvém schématu je "batch" = řádek v tabulce imports.
   const inferredSourceType =
-    (offers.find((o) => (o as any)?.source_type)?.source_type as string | undefined) ??
+    offers.find((o) => o.source_type)?.source_type ??
     (body.retailer ?? "leaflet");
 
   const noteParts = [
@@ -200,11 +200,11 @@ export async function POST(req: NextRequest) {
         });
 
         if (mapped.rawRows.length) {
-          const { error } = await supabase.from("offers_raw").insert(mapped.rawRows as any[]);
+          const { error } = await supabase.from("offers_raw").insert(mapped.rawRows);
           if (error) throw new Error(error.message);
         }
         if (mapped.quarantineRows.length) {
-          const { error } = await supabase.from("offers_quarantine").insert(mapped.quarantineRows as any[]);
+          const { error } = await supabase.from("offers_quarantine").insert(mapped.quarantineRows);
           if (error) throw new Error(error.message);
         }
 

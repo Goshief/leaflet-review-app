@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mapOffersForImportRun } from "../lib/import-run/map-offers.ts";
+import { mapOffersForImportRun, type MapOfferInput } from "../lib/import-run/map-offers.ts";
 
 const baseMeta = {
   import_id: "imp-1",
@@ -8,7 +8,10 @@ const baseMeta = {
   today_iso: "2026-03-25",
 };
 
-function runOne(offer: any, status: "approved" | "pending" | "rejected" | "quarantine" = "approved") {
+function runOne(
+  offer: MapOfferInput,
+  status: "approved" | "pending" | "rejected" | "quarantine" = "approved"
+) {
   return mapOffersForImportRun({
     offers: [offer],
     row_status: { 0: status },

@@ -25,22 +25,29 @@ export type ParsedPatchRequest = {
 
 type UpdateResultRow = Record<string, unknown>;
 
-type UpdateResult = {
-  data: UpdateResultRow | null;
-  error: { message?: string } | null;
-};
+type QueryError = { message?: string } | null;
 
+/**
+ * Loose structural client so a real SupabaseClient remains assignable.
+ * Result rows are validated at use sites via narrow local types (no `any`).
+ */
 export type SupabaseUpdateClient = {
-  /**
-   * Structural typing wrapper around `@supabase/supabase-js` query builders.
-   * Keep it permissive so App Routes can pass a real `SupabaseClient` without
-   * fighting Postgrest builder generics during Next.js type-checking.
-   */
   from(table: string): {
-    select(columns: string): any;
-    update(payload: Record<string, unknown>): any;
+    select(columns: string): unknown;
+    update(payload: Record<string, unknown>): unknown;
   };
 };
+
+type PatchQuery = {
+  select(columns: string): PatchQuery;
+  update(payload: Record<string, unknown>): PatchQuery;
+  eq(column: string, value: string): PatchQuery;
+  maybeSingle(): PromiseLike<{ data: UpdateResultRow | null; error: QueryError }>;
+};
+
+function asPatchQuery(value: unknown): PatchQuery {
+  return value as PatchQuery;
+}
 
 type ExistingImageKeyRow = {
   approved_image_key?: string | null;
@@ -67,9 +74,11 @@ export async function executePatchUpdate(
   supabase: SupabaseUpdateClient,
   request: ParsedPatchRequest
 ) {
-  const existing = await supabase
-    .from(request.sourceTable)
-    .select("id, import_id, approved_image_key, suggested_image_key, image_review_status")
+  const existing = await asPatchQuery(
+    supabase
+      .from(request.sourceTable)
+      .select("id, import_id, approved_image_key, suggested_image_key, image_review_status")
+  )
     .eq("id", request.id)
     .eq("import_id", request.importId)
     .maybeSingle();
@@ -116,9 +125,7 @@ export async function executePatchUpdate(
     const payload = withUpdatedAt
       ? { ...patchForUpdate, updated_at: new Date().toISOString() }
       : { ...patchForUpdate };
-    return supabase
-      .from(request.sourceTable)
-      .update(payload)
+    return asPatchQuery(supabase.from(request.sourceTable).update(payload))
       .eq("id", request.id)
       .eq("import_id", request.importId)
       .select(

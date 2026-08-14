@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     };
   };
   try {
-    body = (await req.json()) as any;
+    body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ ok: false, error: "Očekávám JSON body" }, { status: 400 });
   }
