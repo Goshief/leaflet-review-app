@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 import { listPrompts, upsertPrompt } from "@/lib/prompts/store";
+import { requireAdminApi, requireOperatorApi } from "@/lib/auth/guards";
 
 export async function GET() {
+  const gate = await requireOperatorApi();
+  if (!gate.ok) return gate.response;
+
   const prompts = await listPrompts();
   return NextResponse.json({ ok: true, prompts });
 }
 
 export async function POST(req: Request) {
+  const gate = await requireAdminApi();
+  if (!gate.ok) return gate.response;
+
   let body: {
     store_id?: string;
     title?: string;

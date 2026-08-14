@@ -60,7 +60,7 @@ function navItem(href: string, pathname: string, label: string, icon: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/forbidden") {
     return <div className="min-h-screen bg-slate-50">{children}</div>;
   }
 

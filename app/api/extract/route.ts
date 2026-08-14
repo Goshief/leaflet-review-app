@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { extractWordsFromImageBuffer, runOcrPipeline } from "@/lib/ocr";
 import { NextRequest, NextResponse } from "next/server";
+import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -55,6 +56,9 @@ async function loadFromIntake(intake_id: string): Promise<{
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireOperatorApi();
+  if (!gate.ok) return gate.response;
+
   let form: FormData;
   try {
     form = await req.formData();

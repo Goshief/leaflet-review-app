@@ -11,8 +11,10 @@ const SESSION_CACHE_HEADERS: Record<string, string> = {
 /**
  * Refresh / verify the Auth session for the current request.
  *
- * Point 02: session maintenance only — no admin role grants and no
- * authorization redirects (route guards land in point 04).
+ * Point 02/04: Proxy only maintains the SSR session (getClaims + cookies).
+ * Definitive operator/admin authorization runs in page layouts and each
+ * sensitive API Route Handler via requireOperatorApi / requireAdminApi —
+ * Proxy is not the sole authorization layer and does not re-fetch the Auth user.
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   let supabaseResponse = NextResponse.next({

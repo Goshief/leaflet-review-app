@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 
 import { getSystemPromptLidlCzStrict } from "@/lib/lidl-parser";
 import { getPrompt, upsertPrompt } from "@/lib/prompts/store";
+import { requireAdminApi, requireOperatorApi } from "@/lib/auth/guards";
 
 export async function GET(req: Request) {
+  const gate = await requireOperatorApi();
+  if (!gate.ok) return gate.response;
+
   const url = new URL(req.url);
   const store = (url.searchParams.get("store_id") ?? "lidl").toLowerCase();
 
@@ -44,6 +48,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const gate = await requireAdminApi();
+  if (!gate.ok) return gate.response;
+
   let body: {
     store_id?: string;
     title?: string;
