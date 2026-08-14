@@ -62,11 +62,14 @@ function StoreCard({
       setEditTitle((data.title ?? title).toString());
       setEditSubtitle((data.subtitle ?? subtitle).toString());
       setEditPrompt(data.prompt ?? "");
-      setUpdatedAt((data.updated_at ?? null) as any);
-      setUpdatedBy((data.updated_by ?? null) as any);
-      setVersion(typeof (data as any).version === "number" ? (data as any).version : null);
-      setConfigDefaultExtract(((data as any).config?.default_extract ?? "ocr") as any);
-      setConfigEnabled(((data as any).config?.enabled ?? true) as any);
+      setUpdatedAt(data.updated_at ?? null);
+      setUpdatedBy(data.updated_by ?? null);
+      setVersion(typeof data.version === "number" ? data.version : null);
+      const extract = data.config?.default_extract;
+      setConfigDefaultExtract(
+        extract === "ocr" || extract === "vision" || extract === "local" ? extract : "ocr"
+      );
+      setConfigEnabled(data.config?.enabled ?? true);
       setLoaded(true);
       setBusy(false);
     } catch {
@@ -233,7 +236,12 @@ function StoreCard({
               </label>
               <select
                 value={configDefaultExtract}
-                onChange={(e) => setConfigDefaultExtract(e.target.value as any)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "ocr" || v === "vision" || v === "local") {
+                    setConfigDefaultExtract(v);
+                  }
+                }}
                 disabled={!unlocked}
                 className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
               >
@@ -290,7 +298,7 @@ function TestParser({ storeId, disabled }: { storeId: string; disabled?: boolean
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState<any[] | null>(null);
+  const [ok, setOk] = useState<unknown[] | null>(null);
 
   const run = useCallback(async () => {
     setBusy(true);
@@ -302,7 +310,11 @@ function TestParser({ storeId, disabled }: { storeId: string; disabled?: boolean
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ store_id: storeId, text }),
       });
-      const data = (await res.json()) as any;
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        offers?: unknown[];
+      };
       if (!res.ok || !data.ok) {
         setErr(data.error || `HTTP ${res.status}`);
         return;

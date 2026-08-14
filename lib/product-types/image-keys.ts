@@ -22,10 +22,27 @@ export function getAvailableImageKeys(): string[] {
 /** Filename-style keys uploaded to Supabase Storage bucket `product-types`. */
 const STORAGE_OBJECT_KEY_RE = /^[a-z0-9][a-z0-9._-]*\.[a-z0-9]{2,12}$/i;
 
-export function isValidImageKey(imageKey: string | null | undefined): boolean {
+/** Known catalog slug (whitelist) — not a Storage existence proof. */
+export function isKnownCatalogImageKey(imageKey: string | null | undefined): boolean {
   if (typeof imageKey !== "string") return false;
   const s = imageKey.trim();
-  if (!s) return false;
-  if (AVAILABLE_IMAGE_KEY_SET.has(s)) return true;
-  return STORAGE_OBJECT_KEY_RE.test(s);
+  return s.length > 0 && AVAILABLE_IMAGE_KEY_SET.has(s);
+}
+
+/**
+ * Syntactically valid Storage object key shape.
+ * Does NOT mean the object exists in Storage or that an image is ready.
+ */
+export function isSyntacticStorageObjectKey(imageKey: string | null | undefined): boolean {
+  if (typeof imageKey !== "string") return false;
+  const s = imageKey.trim();
+  return s.length > 0 && STORAGE_OBJECT_KEY_RE.test(s);
+}
+
+/**
+ * Acceptable key shape for writes/overrides: catalog slug OR storage filename pattern.
+ * Callers must not treat this alone as proof that a Storage object exists.
+ */
+export function isValidImageKey(imageKey: string | null | undefined): boolean {
+  return isKnownCatalogImageKey(imageKey) || isSyntacticStorageObjectKey(imageKey);
 }

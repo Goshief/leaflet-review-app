@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { computeRowCounts, type RowReviewStatus } from "@/components/review/product-cards";
+import type { ReviewOfferRow } from "@/components/review/offers-table";
 import { useEffect, useMemo, useState } from "react";
 import { reviewQuarantineHref } from "@/lib/nav/quarantine";
 import type {
@@ -39,13 +40,24 @@ type CommitLogEntry = {
 };
 
 type ReviewStateEntry = {
-  offers?: any[]; // legacy
+  offers?: ReviewOfferRow[]; // legacy
   rowStatus?: Record<number, RowReviewStatus | undefined>; // legacy
-  offersByPage?: Record<string, any[]>;
+  offersByPage?: Record<string, ReviewOfferRow[]>;
   rowStatusByPage?: Record<string, Record<number, RowReviewStatus | undefined>>;
   updated_at?: string;
   resume_url?: string | null;
 };
+
+function migrateStatusMap(
+  st: Record<string, unknown> | Record<number, RowReviewStatus | undefined>
+): Record<number, RowReviewStatus | undefined> {
+  return Object.fromEntries(
+    Object.entries(st as Record<string, unknown>).map(([k, v]) => [
+      Number.isFinite(Number(k)) ? Number(k) : k,
+      v === "quarantined" ? "quarantine" : v,
+    ])
+  ) as Record<number, RowReviewStatus | undefined>;
+}
 
 type LastReview = {
   session_key: string;
@@ -89,9 +101,7 @@ function sessionCounts(state: ReviewStateEntry) {
     for (const [pStr, arr] of pages) {
       const st = (state.rowStatusByPage ?? {})[pStr] ?? {};
       const indices = Array.from({ length: Array.isArray(arr) ? arr.length : 0 }, (_, i) => i);
-      const migrated = Object.fromEntries(
-        Object.entries(st as Record<string, unknown>).map(([k, v]) => [k, v === "quarantined" ? "quarantine" : v])
-      ) as any;
+      const migrated = migrateStatusMap(st as Record<string, unknown>);
       const cc = computeRowCounts(indices, migrated);
       c = {
         approved: c.approved + cc.approved,
@@ -105,9 +115,7 @@ function sessionCounts(state: ReviewStateEntry) {
 
   const offersLen = legacyOffers?.length ?? 0;
   const indices = Array.from({ length: offersLen }, (_, i) => i);
-  const migrated = Object.fromEntries(
-    Object.entries((state.rowStatus ?? {}) as Record<string, unknown>).map(([k, v]) => [k, v === "quarantined" ? "quarantine" : v])
-  ) as any;
+  const migrated = migrateStatusMap((state.rowStatus ?? {}) as Record<string, unknown>);
   return computeRowCounts(indices, migrated);
 }
 
@@ -581,14 +589,16 @@ export function HomeDashboard({
                 </p>
               </div>
               <div className="flex gap-1 rounded-2xl bg-slate-50 p-1 ring-1 ring-slate-200">
-                {[
-                  { id: "7d", label: "7 dní" },
-                  { id: "30d", label: "30 dní" },
-                ].map((t) => (
+                {(
+                  [
+                    { id: "7d", label: "7 dní" },
+                    { id: "30d", label: "30 dní" },
+                  ] as const
+                ).map((t) => (
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setTrendTab(t.id as any)}
+                    onClick={() => setTrendTab(t.id)}
                     className={
                       trendTab === t.id
                         ? "rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
@@ -636,15 +646,17 @@ export function HomeDashboard({
               Nejaktivnější obchody
             </h2>
             <div className="mt-3 flex gap-1 rounded-2xl bg-slate-50 p-1 ring-1 ring-slate-200">
-              {[
-                { id: "inserted", label: "vložené" },
-                { id: "approved", label: "schválené" },
-                { id: "quarantined", label: "karanténa" },
-              ].map((t) => (
+              {(
+                [
+                  { id: "inserted", label: "vložené" },
+                  { id: "approved", label: "schválené" },
+                  { id: "quarantined", label: "karanténa" },
+                ] as const
+              ).map((t) => (
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => setDominanceMetric(t.id as any)}
+                  onClick={() => setDominanceMetric(t.id)}
                   className={
                     dominanceMetric === t.id
                       ? "rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"

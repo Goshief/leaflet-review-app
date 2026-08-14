@@ -19,8 +19,28 @@ function requiredReasonValue(problems: RequiredProblem[]) {
   return `db_required_missing:${problems.join(",")}`;
 }
 
+export type MapOfferInput = {
+  extracted_name?: string | null;
+  price_total?: number | string | null;
+  currency?: string | null;
+  valid_to?: string | null;
+  valid_from?: string | null;
+  store_id?: string | null;
+  source_type?: string | null;
+  pack_qty?: number | null;
+  pack_unit?: string | null;
+  pack_unit_qty?: number | null;
+  price_standard?: number | null;
+  typical_price_per_unit?: number | null;
+  price_with_loyalty_card?: number | null;
+  has_loyalty_card_price?: boolean | null;
+  notes?: string | null;
+  brand?: string | null;
+  category?: string | null;
+};
+
 export function mapOffersForImportRun(args: {
-  offers: any[];
+  offers: MapOfferInput[];
   row_status: Record<number, RowStatus | undefined>;
   meta: MapOffersMeta;
 }): {
@@ -47,7 +67,7 @@ export function mapOffersForImportRun(args: {
     const extracted_name = (o.extracted_name ?? "").toString().trim();
     const price_total = o.price_total ?? null;
     const currency = (o.currency ?? "CZK").toString();
-    const valid_to = (o.valid_to ?? o.valid_from ?? args.meta.today_iso) as any;
+    const valid_to = o.valid_to ?? o.valid_from ?? args.meta.today_iso;
     const valid_to_str = (valid_to ?? "").toString().trim();
 
     const reqProblems: RequiredProblem[] = [];
@@ -70,7 +90,12 @@ export function mapOffersForImportRun(args: {
         valid_from: o.valid_from ?? null,
         valid_to: (o.valid_to ?? valid_to_str) || args.meta.today_iso,
         extracted_name: extracted_name || null,
-        price_total: price_total,
+        price_total:
+          price_total == null || price_total === ""
+            ? null
+            : Number.isFinite(Number(price_total))
+              ? Number(price_total)
+              : null,
         currency: currency,
         pack_qty: o.pack_qty ?? null,
         pack_unit: o.pack_unit ?? null,

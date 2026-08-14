@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BatchItemTable } from "@/lib/batches/item-update";
@@ -345,9 +346,12 @@ export function BatchItemsEditor({ items }: Props) {
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <p className="text-xs text-emerald-700">image_key: {editingImageState?.resolvedImageKey}</p>
                 {editingImageState?.resolvedImageKey ? (
-                  <img
+                  <Image
                     src={getProductTypeImageUrl(editingImageState.resolvedImageKey)}
                     alt=""
+                    width={56}
+                    height={56}
+                    unoptimized
                     className="h-14 w-14 rounded-lg object-contain ring-1 ring-slate-200"
                   />
                 ) : null}

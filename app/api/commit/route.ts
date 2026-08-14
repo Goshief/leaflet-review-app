@@ -4,6 +4,7 @@ import { withPgClient } from "@/lib/db/pg";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { canUseNonTransactionalFallback } from "@/lib/commit/fallback-policy";
 import { makeRequestId, safeErrorJson } from "@/lib/api/safe-error";
+import { requireOperatorApi } from "@/lib/auth/guards";
 import {
   bulkInsertOffersQuarantine,
   bulkInsertOffersRaw,
@@ -26,6 +27,9 @@ type CommitRequest = {
 
 export async function POST(req: NextRequest) {
   const requestId = makeRequestId();
+  const gate = await requireOperatorApi({ requestId });
+  if (!gate.ok) return gate.response;
+
   let body: CommitRequest;
   try {
     body = (await req.json()) as CommitRequest;
@@ -75,7 +79,7 @@ export async function POST(req: NextRequest) {
 
   // V tvém schématu je "batch" = řádek v tabulce imports.
   const inferredSourceType =
-    (offers.find((o) => (o as any)?.source_type)?.source_type as string | undefined) ??
+    offers.find((o) => o.source_type)?.source_type ??
     (body.retailer ?? "leaflet");
 
   const noteParts = [
@@ -200,11 +204,11 @@ export async function POST(req: NextRequest) {
         });
 
         if (mapped.rawRows.length) {
-          const { error } = await supabase.from("offers_raw").insert(mapped.rawRows as any[]);
+          const { error } = await supabase.from("offers_raw").insert(mapped.rawRows);
           if (error) throw new Error(error.message);
         }
         if (mapped.quarantineRows.length) {
-          const { error } = await supabase.from("offers_quarantine").insert(mapped.quarantineRows as any[]);
+          const { error } = await supabase.from("offers_quarantine").insert(mapped.quarantineRows);
           if (error) throw new Error(error.message);
         }
 

@@ -54,11 +54,11 @@ RETURNING id, batch_no;
   return { id: r.id, batch_no: r.batch_no ?? null };
 }
 
-function buildMultiValues<T extends Record<string, any>>(
+function buildMultiValues<T extends Record<string, unknown>>(
   rows: T[],
   cols: (keyof T)[]
-): { sql: string; params: any[] } {
-  const params: any[] = [];
+): { sql: string; params: unknown[] } {
+  const params: unknown[] = [];
   const valuesSql: string[] = [];
   for (let ri = 0; ri < rows.length; ri++) {
     const r = rows[ri]!;

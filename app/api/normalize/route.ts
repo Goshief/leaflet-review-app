@@ -1,6 +1,7 @@
 import { parseLidlPageOffersJson } from "@/lib/lidl-parser";
 import { NextRequest, NextResponse } from "next/server";
 import { makeRequestId, safeErrorJson } from "@/lib/api/safe-error";
+import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -113,6 +114,9 @@ async function callOllama(model: string, prompt: string): Promise<string> {
 
 export async function POST(req: NextRequest) {
   const requestId = makeRequestId();
+  const gate = await requireOperatorApi({ requestId });
+  if (!gate.ok) return gate.response;
+
   try {
     let body: NormalizeRequest;
     try {

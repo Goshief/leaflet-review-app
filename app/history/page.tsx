@@ -3,7 +3,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { computeRowCounts, type RowReviewStatus } from "@/components/review/product-cards";
+import type { ReviewOfferRow } from "@/components/review/offers-table";
 import { useToasts } from "@/components/ui/toasts";
+
+type ExportedItemPreview = {
+  extracted_name?: string | null;
+  page_no?: number | null;
+  price_total?: number | string | null;
+  currency?: string | null;
+};
 
 type CommitLogEntry = {
   id: string;
@@ -27,13 +35,13 @@ type CommitLogEntry = {
   http_status?: number | null;
   db_error?: string | null;
   target_tables?: string[] | null;
-  exported_items?: any[] | null;
+  exported_items?: ExportedItemPreview[] | null;
 };
 
 type ReviewStateEntry = {
-  offers?: any[]; // legacy
+  offers?: ReviewOfferRow[]; // legacy
   rowStatus?: Record<number, RowReviewStatus | undefined>; // legacy
-  offersByPage?: Record<string, any[]>;
+  offersByPage?: Record<string, ReviewOfferRow[]>;
   rowStatusByPage?: Record<string, Record<number, RowReviewStatus | undefined>>;
   updated_at?: string;
   resume_url?: string | null;
@@ -45,6 +53,17 @@ type ReviewStateEntry = {
   pageNo?: number;
   retailer?: string;
 };
+
+function migrateStatusMap(
+  st: Record<string, unknown> | Record<number, RowReviewStatus | undefined>
+): Record<number, RowReviewStatus | undefined> {
+  return Object.fromEntries(
+    Object.entries(st as Record<string, unknown>).map(([k, v]) => [
+      Number.isFinite(Number(k)) ? Number(k) : k,
+      v === "quarantined" ? "quarantine" : v,
+    ])
+  ) as Record<number, RowReviewStatus | undefined>;
+}
 
 function parseNameFromResumeUrl(resumeUrl: string | null | undefined): string | null {
   const u = (resumeUrl ?? "").toString().trim();
@@ -145,7 +164,13 @@ export default function HistoryPage() {
         if (d !== filterDate) return false;
       }
       if (filterStatus !== "all") {
-        const c = x.counts ?? ({} as any);
+        const c = x.counts ?? {
+          staging: 0,
+          approved: 0,
+          rejected: 0,
+          quarantined: 0,
+          pending: 0,
+        };
         const map: Record<string, number> = {
           approved: c.approved ?? 0,
           rejected: c.rejected ?? 0,
@@ -314,12 +339,7 @@ export default function HistoryPage() {
                     { length: Array.isArray(arr) ? arr.length : 0 },
                     (_, i) => i
                   );
-                  const migrated = Object.fromEntries(
-                    Object.entries(st as Record<string, unknown>).map(([k, v]) => [
-                      k,
-                      v === "quarantined" ? "quarantine" : v,
-                    ])
-                  ) as any;
+                  const migrated = migrateStatusMap(st as Record<string, unknown>);
                   const cc = computeRowCounts(indices, migrated);
                   c = {
                     approved: c.approved + cc.approved,
@@ -330,11 +350,9 @@ export default function HistoryPage() {
                 }
               } else {
                 const indices = Array.from({ length: offersLen }, (_, i) => i);
-                const migrated = Object.fromEntries(
-                  Object.entries((state.rowStatus ?? {}) as Record<string, unknown>).map(
-                    ([k, v]) => [k, v === "quarantined" ? "quarantine" : v]
-                  )
-                ) as any;
+                const migrated = migrateStatusMap(
+                  (state.rowStatus ?? {}) as Record<string, unknown>
+                );
                 c = computeRowCounts(indices, migrated);
               }
               const resume = (state.resume_url ?? "").toString().trim();
@@ -455,7 +473,18 @@ export default function HistoryPage() {
               </label>
               <select
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as any)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (
+                    v === "all" ||
+                    v === "approved" ||
+                    v === "rejected" ||
+                    v === "quarantine" ||
+                    v === "pending"
+                  ) {
+                    setFilterStatus(v);
+                  }
+                }}
                 className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20"
               >
                 <option value="all">Vše</option>
@@ -651,7 +680,7 @@ export default function HistoryPage() {
                             Exportované položky ({x.exported_items.length})
                           </p>
                           <ul className="mt-2 max-h-40 overflow-auto space-y-1 text-slate-700">
-                            {x.exported_items.slice(0, 200).map((o: any, idx: number) => (
+                            {x.exported_items.slice(0, 200).map((o, idx) => (
                               <li key={idx} className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="min-w-0 truncate">
                                   <strong>{(o?.extracted_name ?? "—").toString()}</strong>

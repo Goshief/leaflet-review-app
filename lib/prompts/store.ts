@@ -47,7 +47,10 @@ async function readDb(): Promise<ParserPromptsDb> {
     return { version: 2, prompts: [] };
   }
   try {
-    const parsed = JSON.parse(raw) as any;
+    const parsed = JSON.parse(raw) as {
+      version?: number;
+      prompts?: Array<Record<string, unknown>>;
+    };
     if (!parsed || !Array.isArray(parsed.prompts)) {
       return { version: 2, prompts: [] };
     }
@@ -55,7 +58,7 @@ async function readDb(): Promise<ParserPromptsDb> {
     if (parsed.version === 1) {
       const migrated: ParserPromptsDb = {
         version: 2,
-        prompts: (parsed.prompts as any[]).map((p: any) => ({
+        prompts: parsed.prompts.map((p) => ({
           store_id: String(p.store_id ?? "").toLowerCase(),
           title: String(p.title ?? ""),
           subtitle: String(p.subtitle ?? ""),

@@ -54,7 +54,6 @@ export function UploadForm() {
     // Když je zdroj excel, jediný validní způsob je ruční import.
     setMethod(mode === "excel" ? "manual" : "ocr");
     setStep(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   // Prefill z "Duplikovat" na stránce Letáky (/batches).
@@ -129,15 +128,20 @@ export function UploadForm() {
       const data = (await res.json()) as
         | { ok: true; offers: ReviewOfferRow[]; model?: string }
         | { ok?: false; error?: string; validation_errors?: string[] };
-      if (!res.ok || !(data as any)?.ok) {
-        const err = (data as any)?.error || `HTTP ${res.status}`;
-        const v = Array.isArray((data as any)?.validation_errors) ? (data as any).validation_errors : [];
+      if (!res.ok || !("ok" in data) || data.ok !== true) {
+        const err =
+          "error" in data && typeof data.error === "string"
+            ? data.error
+            : `HTTP ${res.status}`;
+        const v =
+          "validation_errors" in data && Array.isArray(data.validation_errors)
+            ? data.validation_errors
+            : [];
         setVerifyErr(v.length ? `${err}: ${v.slice(0, 3).join("; ")}` : err);
         setVerifiedOffers(null);
         return;
       }
-      const offers = ((data as any).offers ?? []) as ReviewOfferRow[];
-      setVerifiedOffers(offers);
+      setVerifiedOffers(data.offers ?? []);
     } catch {
       setVerifyErr("Síťová chyba nebo neplatná odpověď serveru.");
       setVerifiedOffers(null);

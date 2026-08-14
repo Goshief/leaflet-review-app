@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getSetrikPublicOffers } from "@/lib/setrik/public-offers";
 
 export const revalidate = 30;
@@ -155,9 +156,12 @@ export default async function SetrikHomePage() {
                         </span>
                       ) : null}
                       {offer.image_url ? (
-                        <img
+                        <Image
                           src={offer.image_url}
                           alt=""
+                          width={320}
+                          height={320}
+                          unoptimized
                           className="h-full w-full object-contain p-3 transition group-hover:scale-105"
                         />
                       ) : (

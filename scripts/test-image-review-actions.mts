@@ -42,5 +42,16 @@ import { buildImageReviewPatch } from "../lib/product-types/image-review-actions
   assert.equal(result.ok, false);
 }
 
+{
+  const result = buildImageReviewPatch("manual_override", {
+    approved_image_key: null,
+    suggested_image_key: null,
+  }, "uploaded-asset.png");
+  assert.equal(result.ok, true);
+  if (!result.ok) throw new Error("Expected storage-key manual override success");
+  assert.equal(result.patch.approved_image_key, "uploaded-asset.png");
+  assert.equal(result.patch.image_review_status, "manual_override");
+}
+
 console.log("OK: image review action tests passed");
 
