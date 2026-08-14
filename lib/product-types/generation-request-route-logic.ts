@@ -73,7 +73,8 @@ export const GENERATION_REQUEST_UPDATE_MISSING_MESSAGE =
   "Nepodařilo se uložit změnu stavu požadavku.";
 
 const VALID_TRANSITIONS: Record<GenerationRequestStatus, GenerationRequestStatus[]> = {
-  pending: ["processing", "done", "error"],
+  // pending → done is invalid: operator must move through processing first.
+  pending: ["processing", "error"],
   processing: ["done", "error"],
   done: ["done"],
   error: [],
@@ -270,6 +271,8 @@ export async function updateGenerationRequestLifecycle(
   }
 
   // Optional auto-propagation when operator marks request as done and has final key.
+  // Not fully atomic: request row may already be updated if this step fails.
+  // Full atomicity requires a later transactional RPC.
   if (update.status === "done" && update.applyToBatchItem && update.resolvedImageKey) {
     const batchUpdate = await supabase
       .from(row.source_table)
@@ -281,11 +284,13 @@ export async function updateGenerationRequestLifecycle(
       .eq("import_id", row.import_id)
       .maybeSingle();
 
-    if (batchUpdate.error) {
+    if (batchUpdate.error || !batchUpdate.data) {
       return {
         ok: false as const,
         status: 500,
-        error: `Request uložen, ale nepodařilo se propsat batch item: ${batchUpdate.error.message ?? "update failed"}`,
+        error: `Request uložen, ale nepodařilo se propsat batch item: ${
+          batchUpdate.error?.message ?? "update failed"
+        }`,
       };
     }
   }
