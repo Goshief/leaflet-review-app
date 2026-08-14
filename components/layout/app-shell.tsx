@@ -60,6 +60,10 @@ function navItem(href: string, pathname: string, label: string, icon: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
+  if (pathname === "/login") {
+    return <div className="min-h-screen bg-slate-50">{children}</div>;
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-800/60 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 lg:flex">
