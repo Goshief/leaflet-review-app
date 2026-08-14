@@ -2,8 +2,8 @@
  * Server-side identity verification.
  *
  * Trusts JWT validation via getClaims() — never the session user object from
- * cookie storage alone. Does not grant admin/operator roles (point 03) and
- * ignores user_metadata for authorization.
+ * cookie storage alone. Does not grant admin/operator roles (see `actor.ts` /
+ * `roles.ts`) and ignores user_metadata for authorization.
  */
 
 export type AuthenticatedIdentity = {
