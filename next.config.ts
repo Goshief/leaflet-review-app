@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 import path from "node:path";
 import { SECURITY_HEADERS } from "./lib/security/headers";
 
-// Deployment checkpoint: security recovery and upload fix verified 2026-08-16.\nconst nextConfig: NextConfig = {
+// Deployment checkpoint: security recovery and upload fix verified 2026-08-16.
+const nextConfig: NextConfig = {
   /**
    * Starý `public/product-types/gallery.html` jinak vyhrává nad App Routerem.
    * Rewrite běží před filesystemem — `/product-types/gallery.html` vždy obslouží stejnou stránku jako `/product-types/gallery`.
