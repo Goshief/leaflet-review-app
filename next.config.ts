@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { SECURITY_HEADERS } from "./lib/security/headers";
 
 const nextConfig: NextConfig = {
   /**
@@ -16,6 +17,10 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        source: "/(.*)",
+        headers: SECURITY_HEADERS.map(({ key, value }) => ({ key, value })),
+      },
       {
         source: "/product-types/gallery",
         headers: [{ key: "Cache-Control", value: "no-store, max-age=0, must-revalidate" }],

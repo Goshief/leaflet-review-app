@@ -45,8 +45,9 @@ class FakeSupabase implements SupabaseUpdateClient {
     this.failOnUpdatedAt = failOnUpdatedAt;
   }
 
-  from(table: string) {
-    const self = this;
+  from = (table: string) => {
+    const tables = this.tables;
+    const failOnUpdatedAt = this.failOnUpdatedAt;
     let payload: Record<string, unknown> = {};
     let idFilter = "";
     let importFilter = "";
@@ -62,16 +63,17 @@ class FakeSupabase implements SupabaseUpdateClient {
         if (column === "import_id") importFilter = value;
         return query;
       },
-      select(_columns: string) {
+      select(columns: string) {
+        void columns;
         return query;
       },
       async maybeSingle() {
-        const rows = self.tables[table] ?? [];
+        const rows = tables[table] ?? [];
         const idx = rows.findIndex((r) => r.id === idFilter && r.import_id === importFilter);
         if (idx < 0) return { data: null, error: null };
 
         if (isUpdate) {
-          if (self.failOnUpdatedAt && "updated_at" in payload) {
+          if (failOnUpdatedAt && "updated_at" in payload) {
             return { data: null, error: { message: 'column "updated_at" does not exist' } };
           }
           const updated = {
@@ -79,17 +81,19 @@ class FakeSupabase implements SupabaseUpdateClient {
             ...payload,
           } as Row;
           rows[idx] = updated;
-          const { source_table: _st, ...withoutSource } = updated;
+          const { source_table: _sourceTable, ...withoutSource } = updated;
+          void _sourceTable;
           return { data: withoutSource, error: null };
         }
 
         const current = rows[idx] as Row;
-        const { source_table: _st, ...withoutSource } = current;
+        const { source_table: _sourceTable, ...withoutSource } = current;
+        void _sourceTable;
         return { data: withoutSource, error: null };
       },
     };
     return query;
-  }
+  };
 }
 
 const seedRows: Row[] = [

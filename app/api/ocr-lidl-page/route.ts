@@ -1,5 +1,6 @@
 import { extractWordsFromImageBuffer, runOcrPipeline } from "@/lib/ocr";
 import { NextRequest, NextResponse } from "next/server";
+import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -7,6 +8,9 @@ export const maxDuration = 120;
 const ALLOWED_IMAGE = /^image\/(jpeg|png|webp|gif)$/i;
 
 export async function POST(req: NextRequest) {
+  const gate = await requireOperatorApi();
+  if (!gate.ok) return gate.response;
+
   let form: FormData;
   try {
     form = await req.formData();

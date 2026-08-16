@@ -28,15 +28,17 @@ class FakeLifecycleSupabase implements SupabaseGenerationRequestClient {
     this.requests = seed.map((r) => ({ ...r }));
   }
 
-  from(table: string) {
-    const self = this;
-    let selected: ReqRow[] = table === "product_type_generation_requests" ? self.requests : [];
+  from = (table: string) => {
+    const requests = this.requests;
+    let selected: ReqRow[] = table === "product_type_generation_requests" ? requests : [];
     let updatePayload: Record<string, unknown> | null = null;
     const query = {
-      select(_columns: string) {
+      select(columns: string) {
+        void columns;
         return query;
       },
-      insert(_payload: Record<string, unknown>) {
+      insert(payload: Record<string, unknown>) {
+        void payload;
         return {
           select() {
             return {
@@ -52,10 +54,14 @@ class FakeLifecycleSupabase implements SupabaseGenerationRequestClient {
         return query;
       },
       eq(column: string, value: string) {
-        selected = selected.filter((r) => String((r as unknown as Record<string, unknown>)[column]) === value);
+        selected = selected.filter(
+          (r) => String((r as unknown as Record<string, unknown>)[column]) === value
+        );
         return query;
       },
-      order(_column: string, _options: { ascending: boolean }) {
+      order(column: string, options: { ascending: boolean }) {
+        void column;
+        void options;
         return query;
       },
       limit(value: number) {
@@ -74,7 +80,7 @@ class FakeLifecycleSupabase implements SupabaseGenerationRequestClient {
       },
     };
     return query;
-  }
+  };
 }
 
 const seed: ReqRow[] = [

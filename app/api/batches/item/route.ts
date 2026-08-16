@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { makeRequestId, safeErrorJson } from "@/lib/api/safe-error";
+import { requireOperatorApi } from "@/lib/auth/guards";
 import {
   executePatchUpdate,
   parsePatchBody,
@@ -30,6 +31,9 @@ function parseCreateBody(body: CreateBody) {
 
 export async function POST(req: NextRequest) {
   const requestId = makeRequestId();
+  const gate = await requireOperatorApi({ requestId });
+  if (!gate.ok) return gate.response;
+
   try {
     let body: CreateBody;
     try {
@@ -109,6 +113,9 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const requestId = makeRequestId();
+  const gate = await requireOperatorApi({ requestId });
+  if (!gate.ok) return gate.response;
+
   try {
     let body: PatchBody;
     try {

@@ -385,9 +385,31 @@ async function computeDashboardData(
     return mkDemo();
   }
 
-  const imports = (importsRes.data ?? []) as Array<any>;
-  const raw = (rawRes.data ?? []) as Array<any>;
-  const quarantine = (quarantineRes.data ?? []) as Array<any>;
+  type DashboardImportRow = {
+    id?: string | null;
+    created_at?: string | null;
+    source_type?: string | null;
+    batch_no?: number | null;
+    note?: string | null;
+  };
+  type DashboardRawRow = {
+    import_id?: string | null;
+    created_at?: string | null;
+    store_id?: string | null;
+    source_type?: string | null;
+  };
+  type DashboardQuarantineRow = {
+    import_id?: string | null;
+    created_at?: string | null;
+    reviewed_at?: string | null;
+    store_id?: string | null;
+    source_type?: string | null;
+    quarantine_reason?: string | null;
+  };
+
+  const imports = (importsRes.data ?? []) as DashboardImportRow[];
+  const raw = (rawRes.data ?? []) as DashboardRawRow[];
+  const quarantine = (quarantineRes.data ?? []) as DashboardQuarantineRow[];
   const importCreatedAtById = new Map<string, string>();
   for (const imp of imports) {
     const id = imp?.id ? String(imp.id) : "";
@@ -587,15 +609,13 @@ async function computeDashboardData(
     .sort((a, b) => b.count - a.count)
     .slice(0, 8);
 
-  const rawCountByImport = new Map<string, number>();
   const qCountByImport = new Map<string, number>();
   const rejectedCountByImport = new Map<string, number>();
   const pendingCountByImport = new Map<string, number>();
   for (const e of events) {
     const id = String(e.import_id ?? "");
     if (!id) continue;
-    if (e.status === "approved") rawCountByImport.set(id, (rawCountByImport.get(id) ?? 0) + 1);
-    else if (e.status === "quarantine") qCountByImport.set(id, (qCountByImport.get(id) ?? 0) + 1);
+    if (e.status === "quarantine") qCountByImport.set(id, (qCountByImport.get(id) ?? 0) + 1);
     else if (e.status === "rejected")
       rejectedCountByImport.set(id, (rejectedCountByImport.get(id) ?? 0) + 1);
     else if (e.status === "pending")
@@ -607,7 +627,6 @@ async function computeDashboardData(
     .map((imp) => {
       const id = String(imp.id);
       const qCount = qCountByImport.get(id) ?? 0;
-      const rawCount = rawCountByImport.get(id) ?? 0;
       const rejectedCount = rejectedCountByImport.get(id) ?? 0;
       const pendingCount = pendingCountByImport.get(id) ?? 0;
       const titleParts = [
@@ -639,7 +658,7 @@ async function computeDashboardData(
   const activity: ActivityItem[] = [];
   for (const imp of (imports ?? []).slice(0, 5)) {
     activity.push({
-      at: imp.created_at,
+      at: imp.created_at ?? new Date().toISOString(),
       kind: "info",
       text: `${(imp.source_type ?? "import").toString()} · commit`,
     });

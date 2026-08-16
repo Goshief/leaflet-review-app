@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { getProductTypeImageUrl, uploadProductTypeImage } from "@/lib/product-types";
 import { getAvailableImageKeys, isValidImageKey } from "@/lib/product-types/image-keys";
@@ -179,9 +180,12 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                   <dd className="mt-1 flex flex-wrap items-center gap-2">
                     <span>{r.candidate_image_key ?? "—"}</span>
                     {r.candidate_image_key ? (
-                      <img
+                      <Image
                         src={getProductTypeImageUrl(r.candidate_image_key)}
                         alt=""
+                        width={40}
+                        height={40}
+                        unoptimized
                         className="h-10 w-10 rounded object-contain ring-1 ring-slate-200"
                       />
                     ) : null}
@@ -272,9 +276,12 @@ export function GenerationRequestsPanel({ initialRequests }: Props) {
                     Nahrát soubor
                   </label>
                   {(resolvedKeyById[r.id] ?? r.resolved_image_key) ? (
-                    <img
+                    <Image
                       src={getProductTypeImageUrl(resolvedKeyById[r.id] ?? r.resolved_image_key)}
                       alt=""
+                      width={48}
+                      height={48}
+                      unoptimized
                       className="h-12 w-12 rounded object-contain ring-1 ring-slate-200"
                     />
                   ) : null}

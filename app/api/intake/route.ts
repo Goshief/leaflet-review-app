@@ -4,6 +4,7 @@ import os from "os";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { makeRequestId, safeErrorJson } from "@/lib/api/safe-error";
+import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -23,6 +24,9 @@ type IntakeResponse =
   | { ok: false; error: string };
 
 export async function POST(req: NextRequest) {
+  const gate = await requireOperatorApi();
+  if (!gate.ok) return gate.response;
+
   const requestId = makeRequestId();
 
   try {

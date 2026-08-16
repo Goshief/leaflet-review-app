@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { safeErrorJson } from "../lib/api/safe-error";
+import { safeErrorJson } from "../lib/api/safe-error.ts";
 
 function readJson(response: Response) {
   return response.json() as Promise<{

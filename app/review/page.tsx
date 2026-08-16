@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { EditProductSheet } from "@/components/review/edit-product-sheet";
 import {
   ProductReviewCards,
@@ -58,6 +59,72 @@ type ApprovedValidationIssue = {
   >;
 };
 
+/** localStorage / JSON may stringify numeric page keys — read both forms. */
+function pageKeyed<T>(
+  map: Record<number, T> | Record<string, T> | undefined,
+  page: number
+): T | undefined {
+  if (!map) return undefined;
+  const rec = map as Record<string | number, T>;
+  return rec[page] ?? rec[String(page)];
+}
+
+type PersistedReviewState = {
+  offersByPage?: Record<number, ReviewOfferRow[]>;
+  rowStatusByPage?: Record<string, Record<string, string | undefined>>;
+  rowReasonByPage?: Record<number, Record<number, RowReason | undefined>>;
+  pageNo?: number;
+  sourceUrl?: string;
+  extractMode?: string;
+  model?: string;
+  manualText?: string;
+  actorName?: string;
+};
+
+type ManualSessionPersisted = {
+  manualText?: string;
+  sourceUrl?: string;
+};
+
+type CommitLogEntryPersisted = Record<string, unknown>;
+
+type CommitApiSuccess = {
+  committed_raw_count?: number;
+  committed_approved?: number;
+  quarantined_count?: number;
+  quarantined?: number;
+  committed_staging?: number;
+  committed_at?: string;
+  required_field_errors?: Array<{ problems?: string[] }>;
+  import_id?: string;
+  batch_id?: string;
+  actor?: string | null;
+};
+
+type QuarantineReasonCode = Extract<RowReason, { kind: "quarantine" }>["code"];
+type RejectedReasonCode = Extract<RowReason, { kind: "rejected" }>["code"];
+
+function isQuarantineReasonCode(code: string): code is QuarantineReasonCode {
+  return (
+    code === "missing_price" ||
+    code === "missing_packaging" ||
+    code === "unclear_name" ||
+    code === "suspicious_ocr" ||
+    code === "duplicate" ||
+    code === "other"
+  );
+}
+
+function isRejectedReasonCode(code: string): code is RejectedReasonCode {
+  return (
+    code === "not_a_product" ||
+    code === "bad_block" ||
+    code === "duplicate_row" ||
+    code === "nonsense_price" ||
+    code === "other"
+  );
+}
+
 export default function ReviewPage() {
   const router = useRouter();
   const toast = useToasts();
@@ -108,7 +175,6 @@ export default function ReviewPage() {
     Record<number, Record<number, RowReason | undefined>>
   >({});
   const [editIndex, setEditIndex] = useState<number | null>(null);
-  const [qs, setQs] = useState<string>("");
   const [tab, setTab] = useState<
     "all" | "pending" | "approved" | "rejected" | "quarantine"
   >("all");
@@ -145,13 +211,6 @@ export default function ReviewPage() {
   const currentOffers = useMemo<ReviewOfferRow[]>(() => {
     return offersByPage?.[pageNo] ?? [];
   }, [offersByPage, pageNo]);
-  const currentRowStatus = useMemo<Record<number, RowReviewStatus | undefined>>(() => {
-    // Pozor: po JSON.parse jsou klíče objektů stringy ("3"), i když to logicky jsou čísla.
-    return (rowStatusByPage[pageNo] ?? (rowStatusByPage as any)[String(pageNo)] ?? {}) as Record<
-      number,
-      RowReviewStatus | undefined
-    >;
-  }, [rowStatusByPage, pageNo]);
 
   const flat = useMemo(() => {
     const pages = Object.keys(offersByPage ?? {})
@@ -164,14 +223,8 @@ export default function ReviewPage() {
     const reason: Record<number, RowReason | undefined> = {};
     for (const p of pages) {
       const arr = offersByPage?.[p] ?? [];
-      const stPage = (rowStatusByPage[p] ?? (rowStatusByPage as any)[String(p)] ?? {}) as Record<
-        number,
-        RowReviewStatus | undefined
-      >;
-      const rrPage = (rowReasonByPage[p] ?? (rowReasonByPage as any)[String(p)] ?? {}) as Record<
-        number,
-        RowReason | undefined
-      >;
+      const stPage = pageKeyed(rowStatusByPage, p) ?? {};
+      const rrPage = pageKeyed(rowReasonByPage, p) ?? {};
       for (let i = 0; i < arr.length; i++) {
         const fi = offers.length;
         offers.push(arr[i]!);
@@ -183,41 +236,8 @@ export default function ReviewPage() {
     return { offers, ptr, status, reason };
   }, [offersByPage, rowStatusByPage, rowReasonByPage]);
 
-  // Backwards-compatible aliases (zbytek stránky je psaný pro `offers` + `rowStatus`).
+  // Backwards-compatible alias (zbytek stránky je psaný pro `offers`).
   const offers = currentOffers;
-  const rowStatus = currentRowStatus;
-
-  const setOffers = useCallback(
-    (
-      next:
-        | ReviewOfferRow[] 
-        | null
-        | ((prev: ReviewOfferRow[] | null) => ReviewOfferRow[] | null)
-    ) => {
-      setOffersByPage((prev) => {
-        const prevPage = (prev?.[pageNo] ?? null) as ReviewOfferRow[] | null;
-        const resolved = typeof next === "function" ? (next as any)(prevPage) : next;
-        if (resolved == null) return prev ?? {};
-        return { ...(prev ?? {}), [pageNo]: resolved };
-      });
-    },
-    [pageNo]
-  );
-
-  const setRowStatus = useCallback(
-    (
-      next:
-        | Record<number, RowReviewStatus | undefined>
-        | ((prev: Record<number, RowReviewStatus | undefined>) => Record<number, RowReviewStatus | undefined>)
-    ) => {
-      setRowStatusByPage((prev) => {
-        const prevPage = prev[pageNo] ?? {};
-        const resolved = typeof next === "function" ? (next as any)(prevPage) : next;
-        return { ...prev, [pageNo]: resolved };
-      });
-    },
-    [pageNo]
-  );
 
   useEffect(() => {
     if (kind === "manual") return;
@@ -254,12 +274,12 @@ export default function ReviewPage() {
     if (mode !== "manual" || !sessionId) return;
     try {
       const raw = localStorage.getItem(`leaflet_manual_session:${sessionId}`) ?? "";
-      const parsed = raw ? (JSON.parse(raw) as any) : null;
+      const parsed = raw ? (JSON.parse(raw) as ManualSessionPersisted) : null;
       const txt = (parsed?.manualText ?? "").toString();
       if (txt.trim()) {
         startManualImport(txt);
         if ((parsed?.sourceUrl ?? "").toString().trim() && !sourceUrl.trim()) {
-          setSourceUrl((parsed.sourceUrl as string) ?? "");
+          setSourceUrl(String(parsed?.sourceUrl ?? ""));
         }
       }
     } catch {
@@ -353,26 +373,36 @@ export default function ReviewPage() {
     try {
       const raw = localStorage.getItem(`leaflet_review_state:${key}`) ?? "";
       if (!raw.trim()) return;
-      const s = JSON.parse(raw) as any;
+      const s = JSON.parse(raw) as PersistedReviewState;
       if (s.offersByPage && typeof s.offersByPage === "object") setOffersByPage(s.offersByPage);
       if (s.rowStatusByPage && typeof s.rowStatusByPage === "object") {
         // migrate legacy "quarantined" -> "quarantine"
-        const migrated: Record<string, Record<string, unknown>> = {};
-        for (const [p, st] of Object.entries(s.rowStatusByPage as Record<string, any>)) {
-          const next: Record<string, unknown> = {};
-          for (const [k2, v2] of Object.entries((st ?? {}) as Record<string, unknown>)) {
-            next[k2] = v2 === "quarantined" ? "quarantine" : v2;
+        const migrated: Record<number, Record<number, RowReviewStatus | undefined>> = {};
+        for (const [p, st] of Object.entries(s.rowStatusByPage)) {
+          const next: Record<number, RowReviewStatus | undefined> = {};
+          for (const [k2, v2] of Object.entries(st ?? {})) {
+            const keyNum = Number(k2);
+            const status =
+              v2 === "quarantined" ? "quarantine" : (v2 as RowReviewStatus | undefined);
+            next[Number.isFinite(keyNum) ? keyNum : (k2 as unknown as number)] = status;
           }
-          migrated[p] = next;
+          const pageNum = Number(p);
+          migrated[Number.isFinite(pageNum) ? pageNum : (p as unknown as number)] = next;
         }
-        setRowStatusByPage(migrated as any);
+        setRowStatusByPage(migrated);
       }
       if (s.rowReasonByPage && typeof s.rowReasonByPage === "object") {
         setRowReasonByPage(s.rowReasonByPage);
       }
       if (typeof s.pageNo === "number" && s.pageNo >= 1) setPageNo(s.pageNo);
       if (typeof s.sourceUrl === "string") setSourceUrl(s.sourceUrl);
-      if (typeof s.extractMode === "string") setExtractMode(s.extractMode);
+      if (
+        s.extractMode === "ocr" ||
+        s.extractMode === "vision" ||
+        s.extractMode === "local"
+      ) {
+        setExtractMode(s.extractMode);
+      }
       if (typeof s.model === "string") setModel(s.model);
       if (typeof s.manualText === "string") setManualText(s.manualText);
       if (typeof s.actorName === "string") setActorName(s.actorName);
@@ -469,6 +499,7 @@ export default function ReviewPage() {
     manualText,
     actorName,
     fileName,
+    toast,
   ]);
 
   useEffect(() => {
@@ -522,7 +553,6 @@ export default function ReviewPage() {
       p.delete("focus_idx");
       const nextQs = `?${p.toString()}`;
       setTab(nextTab);
-      setQs(nextQs);
       setFocus(null);
       router.push(`/review${nextQs}`);
     },
@@ -543,7 +573,6 @@ export default function ReviewPage() {
         setFocus(next);
       }
       const nextQs = `?${p.toString()}`;
-      setQs(nextQs);
       router.push(`/review${nextQs}`);
     },
     [router]
@@ -553,7 +582,6 @@ export default function ReviewPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const sync = () => {
-      setQs(window.location.search || "");
       setTab(readTabFromLocation());
       setFocus(readFocusFromLocation());
       setStatusFilter(readStatusFilterFromLocation());
@@ -570,7 +598,6 @@ export default function ReviewPage() {
       p.set("filter", next);
       const nextQs = `?${p.toString()}`;
       setStatusFilter(next);
-      setQs(nextQs);
       router.push(`/review${nextQs}`);
     },
     [router]
@@ -581,44 +608,8 @@ export default function ReviewPage() {
     if (typeof window === "undefined") return;
     const p = new URLSearchParams(window.location.search);
     const e = (p.get("extract") ?? "").trim();
-    const allowed = new Set(["ocr", "vision", "local"]);
-    if (allowed.has(e)) setExtractMode(e as any);
+    if (e === "ocr" || e === "vision" || e === "local") setExtractMode(e);
   }, []);
-
-  const tabHref = useMemo(() => {
-    if (typeof window === "undefined") {
-      return {
-        all: "/review?tab=all",
-        pending: "/review?tab=pending",
-        approved: "/review?tab=approved",
-        rejected: "/review?tab=rejected",
-        quarantine: "/review?tab=quarantine",
-      };
-    }
-    const p = new URLSearchParams(window.location.search);
-    return {
-      all: (() => {
-        p.set("tab", "all");
-        return `/review?${p.toString()}`;
-      })(),
-      pending: (() => {
-        p.set("tab", "pending");
-        return `/review?${p.toString()}`;
-      })(),
-      approved: (() => {
-        p.set("tab", "approved");
-        return `/review?${p.toString()}`;
-      })(),
-      rejected: (() => {
-        p.set("tab", "rejected");
-        return `/review?${p.toString()}`;
-      })(),
-      quarantine: (() => {
-        p.set("tab", "quarantine");
-        return `/review?${p.toString()}`;
-      })(),
-    };
-  }, [qs]);
 
   useEffect(() => {
     if (kind !== "pdf" || !file) {
@@ -700,7 +691,7 @@ export default function ReviewPage() {
     const s = new Set<string>();
     for (const o of flat.offers) {
       const v =
-        (o.store_id ?? (o as any).source_type ?? "").toString().trim().toLowerCase();
+        (o.store_id ?? o.source_type ?? "").toString().trim().toLowerCase();
       if (v) s.add(v);
     }
     return Array.from(s).sort((a, b) => a.localeCompare(b, "cs"));
@@ -709,7 +700,7 @@ export default function ReviewPage() {
   const pageOptions = useMemo(() => {
     const s = new Set<number>();
     for (const o of flat.offers) {
-      const p = (o as any).page_no;
+      const p = o.page_no;
       if (typeof p === "number" && Number.isFinite(p)) s.add(p);
     }
     return Array.from(s).sort((a, b) => a - b);
@@ -730,12 +721,12 @@ export default function ReviewPage() {
 
         if (filterStore !== "all") {
           const v =
-            (o.store_id ?? (o as any).source_type ?? "").toString().trim().toLowerCase();
+            (o.store_id ?? o.source_type ?? "").toString().trim().toLowerCase();
           if (v !== filterStore) return false;
         }
 
         if (filterPage !== "all") {
-          const p = (o as any).page_no;
+          const p = o.page_no;
           if (String(p ?? "") !== filterPage) return false;
         }
 
@@ -995,7 +986,7 @@ export default function ReviewPage() {
         arr.push(o);
         groups.set(p, arr);
       }
-      for (const [p, arr] of groups.entries()) {
+      for (const [, arr] of groups.entries()) {
         arr.sort((a, b) => {
           const an = (a.extracted_name ?? "").trim();
           const bn = (b.extracted_name ?? "").trim();
@@ -1048,7 +1039,7 @@ export default function ReviewPage() {
     }
 
     const validateApproved = (idx: number): ApprovedValidationIssue | null => {
-      const o = flat.offers[idx] as any;
+      const o = flat.offers[idx];
       if (!o) return { flatIndex: idx, name: "—", problems: ["missing_name"] };
       const problems: ApprovedValidationIssue["problems"] = [];
       const name = (o.extracted_name ?? "").toString().trim();
@@ -1086,18 +1077,18 @@ export default function ReviewPage() {
     );
 
     const exportedItems = approvedOffers.map((o) => ({
-      page_no: (o as any).page_no ?? null,
-      store_id: (o as any).store_id ?? null,
-      source_type: (o as any).source_type ?? null,
-      extracted_name: (o as any).extracted_name ?? null,
-      price_total: (o as any).price_total ?? null,
-      currency: (o as any).currency ?? null,
-      has_loyalty_card_price: (o as any).has_loyalty_card_price ?? null,
-      price_with_loyalty_card: (o as any).price_with_loyalty_card ?? null,
-      notes: (o as any).notes ?? null,
+      page_no: o.page_no ?? null,
+      store_id: o.store_id ?? null,
+      source_type: o.source_type ?? null,
+      extracted_name: o.extracted_name ?? null,
+      price_total: o.price_total ?? null,
+      currency: o.currency ?? null,
+      has_loyalty_card_price: o.has_loyalty_card_price ?? null,
+      price_with_loyalty_card: o.price_with_loyalty_card ?? null,
+      notes: o.notes ?? null,
       raw_text_block:
-        typeof (o as any).raw_text_block === "string"
-          ? String((o as any).raw_text_block).slice(0, 240)
+        typeof o.raw_text_block === "string"
+          ? String(o.raw_text_block).slice(0, 240)
           : null,
     }));
 
@@ -1183,7 +1174,7 @@ export default function ReviewPage() {
             exported_items: exportedItems,
           };
           const raw = localStorage.getItem("leaflet_commit_log") ?? "[]";
-          const arr = JSON.parse(raw) as any[];
+          const arr = JSON.parse(raw) as CommitLogEntryPersisted[];
           const next = Array.isArray(arr) ? [entry, ...arr].slice(0, 200) : [entry];
           localStorage.setItem("leaflet_commit_log", JSON.stringify(next));
         } catch {
@@ -1191,7 +1182,7 @@ export default function ReviewPage() {
         }
         return;
       }
-      const ok = data as any;
+      const ok = data as CommitApiSuccess;
       const rawCount = Number(ok.committed_raw_count ?? ok.committed_approved ?? 0);
       const quarantinedCount = Number(ok.quarantined_count ?? ok.quarantined ?? 0);
       setCommitMsg(
@@ -1207,7 +1198,7 @@ export default function ReviewPage() {
           missing_valid_to: "chybí valid_to",
         };
         const countsByProblem = reqErrs
-          .flatMap((x: any) => (Array.isArray(x?.problems) ? (x.problems as string[]) : []))
+          .flatMap((x) => (Array.isArray(x?.problems) ? x.problems : []))
           .reduce((acc: Record<string, number>, p: string) => {
             acc[p] = (acc[p] ?? 0) + 1;
             return acc;
@@ -1262,7 +1253,7 @@ export default function ReviewPage() {
           exported_items: exportedItems,
         };
         const raw = localStorage.getItem("leaflet_commit_log") ?? "[]";
-        const arr = JSON.parse(raw) as any[];
+        const arr = JSON.parse(raw) as CommitLogEntryPersisted[];
         const next = Array.isArray(arr) ? [entry, ...arr].slice(0, 200) : [entry];
         localStorage.setItem("leaflet_commit_log", JSON.stringify(next));
       } catch {
@@ -1282,7 +1273,7 @@ export default function ReviewPage() {
       .filter((i) => (flat.status[i] ?? "pending") === "approved");
 
     const validateApproved = (idx: number): ApprovedValidationIssue | null => {
-      const o = flat.offers[idx] as any;
+      const o = flat.offers[idx];
       if (!o) return { flatIndex: idx, name: "—", problems: ["missing_name"] };
       const problems: ApprovedValidationIssue["problems"] = [];
       const name = (o.extracted_name ?? "").toString().trim();
@@ -1305,7 +1296,7 @@ export default function ReviewPage() {
     };
 
     const issues = approvedIndices.map(validateApproved).filter(Boolean) as ApprovedValidationIssue[];
-    const approvedOffers = approvedIndices.map((i) => flat.offers[i]!).filter(Boolean) as any[];
+    const approvedOffers = approvedIndices.map((i) => flat.offers[i]!).filter(Boolean);
 
     const row_status = Object.fromEntries(
       approvedOffers.map((_, i) => [String(i), "approved" as const])
@@ -1454,18 +1445,26 @@ export default function ReviewPage() {
       return;
     }
 
-    const reason: RowReason =
+    const reason: RowReason | null =
       status === "quarantine"
-        ? {
-            kind: "quarantine",
-            code: code as any,
-            detail: detail || null,
-          }
-        : {
-            kind: "rejected",
-            code: code as any,
-            detail: detail || null,
-          };
+        ? isQuarantineReasonCode(code)
+          ? {
+              kind: "quarantine",
+              code,
+              detail: detail || null,
+            }
+          : null
+        : isRejectedReasonCode(code)
+          ? {
+              kind: "rejected",
+              code,
+              detail: detail || null,
+            }
+          : null;
+    if (!reason) {
+      setReasonDialog({ ...reasonDialog, err: "Neplatný důvod." });
+      return;
+    }
 
     setRowStatusByPage((prev) => {
       const next = { ...prev };
@@ -1520,10 +1519,6 @@ export default function ReviewPage() {
     },
     [flat.ptr]
   );
-
-  const toggleFilter = (s: RowReviewStatus) => {
-    setStatusFilter((prev) => (prev === s ? "all" : s));
-  };
 
   return (
     <main className="mx-auto max-w-[1600px] space-y-8 pb-24">
@@ -1783,20 +1778,23 @@ export default function ReviewPage() {
             ) : pdfPreviewErr ? (
               <p className="text-sm text-rose-600">{pdfPreviewErr}</p>
             ) : pdfPreviewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={pdfPreviewUrl}
                 alt={`Stránka ${pageNo}`}
+                width={1200}
+                height={1600}
+                unoptimized
                 className="max-h-[min(72vh,640px)] w-full rounded-2xl border border-slate-100 bg-slate-50 object-contain shadow-inner"
               />
             ) : null
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element
             blobUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={blobUrl}
                 alt="Stránka"
+                width={1200}
+                height={1600}
+                unoptimized
                 className="max-h-[min(72vh,640px)] w-full rounded-2xl border border-slate-100 bg-slate-50 object-contain shadow-inner"
               />
             ) : null
@@ -1823,7 +1821,18 @@ export default function ReviewPage() {
                 </label>
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (
+                      v === "all" ||
+                      v === "pending" ||
+                      v === "approved" ||
+                      v === "rejected" ||
+                      v === "quarantine"
+                    ) {
+                      setStatusFilter(v);
+                    }
+                  }}
                   className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20"
                 >
                   <option value="all">Vše</option>
@@ -2443,8 +2452,8 @@ export default function ReviewPage() {
                   {JSON.stringify(
                     {
                       ...dryRun.payload,
-                      offers: Array.isArray((dryRun.payload as any).offers)
-                        ? (dryRun.payload as any).offers.slice(0, 20)
+                      offers: Array.isArray(dryRun.payload.offers)
+                        ? dryRun.payload.offers.slice(0, 20)
                         : [],
                     },
                     null,

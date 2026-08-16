@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -17,6 +18,9 @@ function mimeFromExt(ext: string): string {
 }
 
 export async function GET(req: Request) {
+  const gate = await requireOperatorApi();
+  if (!gate.ok) return gate.response;
+
   const url = new URL(req.url);
   const intake_id = (url.searchParams.get("intake_id") ?? "").trim();
   if (!intake_id) {

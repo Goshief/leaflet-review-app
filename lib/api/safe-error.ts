@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
+import { applySecurityHeaders } from "../security/headers.ts";
 
 export type SafeErrorCode =
   | "BAD_REQUEST"
@@ -48,7 +49,7 @@ export function safeErrorJson({
     ...logContext,
   });
 
-  return NextResponse.json(
+  return applySecurityHeaders(NextResponse.json(
     {
       ok: false,
       error: {
@@ -58,5 +59,5 @@ export function safeErrorJson({
       request_id: rid,
     },
     { status }
-  );
+  ));
 }
