@@ -5,6 +5,7 @@ import {
   useLeafletPreview,
 } from "@/components/leaflet/preview-context";
 import type { ReviewOfferRow } from "@/components/review/offers-table";
+import { readIntakeUploadResult } from "@/lib/intake/upload-result";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -546,11 +547,9 @@ export function UploadForm() {
               const fd = new FormData();
               fd.append("file", f);
               const res = await fetch("/api/intake", { method: "POST", body: fd });
-              const data = (await res.json()) as
-                | { ok: true; intake_id: string; original_name: string | null; mime: string }
-                | { ok: false; error: string };
-              if (!res.ok || !data.ok) {
-                setStatus(("error" in data && data.error) || `HTTP ${res.status}`);
+              const data = await readIntakeUploadResult(res);
+              if (!data.ok) {
+                setStatus(data.error);
                 setError(true);
                 return;
               }
@@ -561,8 +560,12 @@ export function UploadForm() {
                 extract: method,
               });
               router.push(`/review?${qs.toString()}`);
-            } catch {
-              setStatus("Upload selhal (síťová chyba).");
+            } catch (cause) {
+              setStatus(
+                cause instanceof TypeError
+                  ? "Server není dostupný. Zkontroluj připojení a zkus to znovu."
+                  : "Upload se nepodařilo dokončit. Zkus to znovu."
+              );
               setError(true);
             } finally {
               setUploadBusy(false);
