@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { getSetrikPublicOffers } from "@/lib/setrik/public-offers";
 
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
 
 function formatPrice(value: number | null, currency: string) {
   if (value == null) return "Cena neuvedena";
