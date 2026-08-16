@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireOperatorApi } from "@/lib/auth/guards";
 
 import {
   parseLidlPageOffersJson,
@@ -152,6 +153,9 @@ function fromSemicolonCsv(text: string): LidlPageOffer[] {
 }
 
 export async function POST(req: Request) {
+  const gate = await requireOperatorApi();
+  if (!gate.ok) return gate.response;
+
   let body: ImportReq;
   try {
     body = (await req.json()) as ImportReq;

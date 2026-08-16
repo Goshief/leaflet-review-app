@@ -54,5 +54,28 @@ import {
   assert.equal(canBatchItemRunSaveAction({}), false);
 }
 
+{
+  const state = resolveBatchItemImageState({
+    approved_image_key: "uploaded-asset.png",
+    suggested_image_key: null,
+  });
+  assert.equal(state.resolvedImageKey, "uploaded-asset.png");
+  assert.equal(state.hasValidImage, true);
+  assert.equal(state.imageMissing, false);
+  assert.equal(
+    canBatchItemRunSaveAction({ approved_image_key: "uploaded-asset.png" }),
+    true
+  );
+}
+
+{
+  const state = resolveBatchItemImageState({
+    approved_image_key: null,
+    suggested_image_key: "manual-upload.webp",
+  });
+  assert.equal(state.resolvedImageKey, "manual-upload.webp");
+  assert.equal(state.hasValidImage, true);
+}
+
 console.log("OK: batch item image state tests passed");
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import type { QuarantineListItem } from "@/lib/quarantine/list-quarantine";
 import { parseQuarantineQuery } from "@/lib/quarantine/query";
@@ -300,10 +301,13 @@ export function QuarantineClient({
                 />
                 <div className="flex min-h-[88px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 sm:min-h-[120px]">
                   {imageState.hasValidImage ? (
-                    <img
+                    <Image
                       data-testid="quarantine-product-image-preview"
                       src={getProductTypeImageUrl(imageState.resolvedImageKey)}
                       alt=""
+                      width={132}
+                      height={120}
+                      unoptimized
                       className="max-h-[120px] max-w-[132px] object-contain"
                     />
                   ) : vm.hasOcrThumb ? (

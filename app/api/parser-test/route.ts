@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseLidlPageOffersJson } from "@/lib/lidl-parser";
+import { requireAdminApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
+  const gate = await requireAdminApi();
+  if (!gate.ok) return gate.response;
+
   let body: { text?: string; store_id?: string };
   try {
-    body = (await req.json()) as any;
+    body = (await req.json()) as { text?: string; store_id?: string };
   } catch {
     return NextResponse.json({ ok: false, error: "Očekávám JSON body" }, { status: 400 });
   }

@@ -12,6 +12,7 @@ import {
 } from "@/lib/lidl-parser/mock-extraction";
 import { NextRequest, NextResponse } from "next/server";
 import { makeRequestId, safeErrorJson } from "@/lib/api/safe-error";
+import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -256,6 +257,9 @@ async function extractWithGeminiVision(
 
 export async function POST(req: NextRequest) {
   const requestId = makeRequestId();
+  const gate = await requireOperatorApi({ requestId });
+  if (!gate.ok) return gate.response;
+
   try {
     let form: FormData;
     try {

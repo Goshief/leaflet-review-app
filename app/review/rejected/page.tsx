@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 
-export default function RejectedReviewPage({
+export default async function RejectedReviewPage({
   searchParams,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const params = await searchParams;
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(searchParams ?? {})) {
+  for (const [k, v] of Object.entries(params ?? {})) {
     if (v == null) continue;
     if (Array.isArray(v)) {
       for (const one of v) p.append(k, one);
@@ -17,4 +18,3 @@ export default function RejectedReviewPage({
   p.set("tab", "rejected");
   redirect(`/review?${p.toString()}`);
 }
-

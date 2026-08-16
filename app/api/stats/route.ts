@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { makeRequestId, safeErrorJson } from "@/lib/api/safe-error";
+import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function GET() {
   const requestId = makeRequestId();
+  const gate = await requireOperatorApi({ requestId });
+  if (!gate.ok) return gate.response;
+
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return safeErrorJson({

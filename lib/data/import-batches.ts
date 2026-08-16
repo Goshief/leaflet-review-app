@@ -89,13 +89,15 @@ export async function listImportBatches(): Promise<ListImportBatchesResult> {
   const imports = (data ?? []) as ImportRow[];
   const ids = imports.map((x) => x.id).filter(Boolean);
 
+type ImportIdRow = { import_id?: string | null };
+
   const [rawRes, qRes] = await Promise.all([
     ids.length
       ? supabase.from("offers_raw").select("import_id").in("import_id", ids).limit(5000)
-      : Promise.resolve({ data: [], error: null } as any),
+      : Promise.resolve({ data: [] as ImportIdRow[], error: null }),
     ids.length
       ? supabase.from("offers_quarantine").select("import_id").in("import_id", ids).limit(5000)
-      : Promise.resolve({ data: [], error: null } as any),
+      : Promise.resolve({ data: [] as ImportIdRow[], error: null }),
   ]);
 
   if (rawRes.error || qRes.error) {
@@ -108,14 +110,14 @@ export async function listImportBatches(): Promise<ListImportBatchesResult> {
   }
 
   const rawCount = new Map<string, number>();
-  for (const r of (rawRes.data ?? []) as any[]) {
-    const id = String((r as any).import_id ?? "");
+  for (const r of (rawRes.data ?? []) as ImportIdRow[]) {
+    const id = String(r.import_id ?? "");
     if (!id) continue;
     rawCount.set(id, (rawCount.get(id) ?? 0) + 1);
   }
   const qCount = new Map<string, number>();
-  for (const r of (qRes.data ?? []) as any[]) {
-    const id = String((r as any).import_id ?? "");
+  for (const r of (qRes.data ?? []) as ImportIdRow[]) {
+    const id = String(r.import_id ?? "");
     if (!id) continue;
     qCount.set(id, (qCount.get(id) ?? 0) + 1);
   }

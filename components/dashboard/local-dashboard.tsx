@@ -11,7 +11,7 @@ import type {
   RetailerBreakdownRow,
   RetailerDominanceRow,
 } from "@/lib/dashboard/get-dashboard";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { quarantineLocalHref } from "@/lib/nav/quarantine";
 
 type CommitLogEntry = {
@@ -42,14 +42,45 @@ function safeNum(x: unknown): number {
   return typeof x === "number" && Number.isFinite(x) ? x : 0;
 }
 
-function readCommitLog(): CommitLogEntry[] {
+function readCommitLogRaw(): string {
   try {
-    const raw = localStorage.getItem("leaflet_commit_log") ?? "[]";
+    return localStorage.getItem("leaflet_commit_log") ?? "[]";
+  } catch {
+    return "[]";
+  }
+}
+
+function parseCommitLog(raw: string): CommitLogEntry[] {
+  try {
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? (arr as CommitLogEntry[]) : [];
   } catch {
     return [];
   }
+}
+
+const EMPTY_COMMIT_LOG: CommitLogEntry[] = [];
+let commitLogCacheRaw: string | null = null;
+let commitLogCacheValue: CommitLogEntry[] = EMPTY_COMMIT_LOG;
+
+function subscribeCommitLog(onStoreChange: () => void) {
+  const onStorage = (ev: StorageEvent) => {
+    if (ev.key === "leaflet_commit_log" || ev.key == null) onStoreChange();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => window.removeEventListener("storage", onStorage);
+}
+
+function getCommitLogSnapshot(): CommitLogEntry[] {
+  const raw = readCommitLogRaw();
+  if (raw === commitLogCacheRaw) return commitLogCacheValue;
+  commitLogCacheRaw = raw;
+  commitLogCacheValue = parseCommitLog(raw);
+  return commitLogCacheValue;
+}
+
+function getCommitLogServerSnapshot(): CommitLogEntry[] {
+  return EMPTY_COMMIT_LOG;
 }
 
 function sumCounts(entries: CommitLogEntry[]) {
@@ -75,16 +106,11 @@ function computeApprovalRatePct(inserted: number, approved: number): number | nu
 }
 
 export function LocalDashboard() {
-  const [log, setLog] = useState<CommitLogEntry[]>([]);
-
-  useEffect(() => {
-    setLog(readCommitLog());
-    const onStorage = (ev: StorageEvent) => {
-      if (ev.key === "leaflet_commit_log") setLog(readCommitLog());
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  const log = useSyncExternalStore(
+    subscribeCommitLog,
+    getCommitLogSnapshot,
+    getCommitLogServerSnapshot
+  );
 
   const derived = useMemo(() => {
     const now = new Date();

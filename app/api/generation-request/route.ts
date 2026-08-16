@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { makeRequestId, safeErrorJson } from "@/lib/api/safe-error";
+import { requireOperatorApi } from "@/lib/auth/guards";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   createOrReuseGenerationRequest,
@@ -16,6 +17,9 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function GET() {
+  const gate = await requireOperatorApi();
+  if (!gate.ok) return gate.response;
+
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json(
@@ -36,6 +40,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const requestId = makeRequestId();
+  const gate = await requireOperatorApi({ requestId });
+  if (!gate.ok) return gate.response;
+
   try {
     let body: GenerationRequestBody;
     try {
@@ -93,6 +100,9 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const requestId = makeRequestId();
+  const gate = await requireOperatorApi({ requestId });
+  if (!gate.ok) return gate.response;
+
   try {
     let body: GenerationRequestUpdateBody;
     try {

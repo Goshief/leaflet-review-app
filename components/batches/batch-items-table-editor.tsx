@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { getProductTypeImageUrl, uploadProductTypeImage } from "@/lib/product-types";
@@ -528,9 +529,12 @@ export function BatchItemsTableEditor({ items, importId }: Props) {
                     <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
                       image_key: {imageState.resolvedImageKey}
                     </span>
-                    <img
+                    <Image
                       src={getProductTypeImageUrl(imageState.resolvedImageKey)}
                       alt=""
+                      width={48}
+                      height={48}
+                      unoptimized
                       className="h-12 w-12 rounded-lg object-contain ring-1 ring-slate-200"
                     />
                   </span>
@@ -622,9 +626,12 @@ export function BatchItemsTableEditor({ items, importId }: Props) {
                   Nahrát do úložiště
                 </label>
                 {selectedManualKeyValid ? (
-                  <img
+                  <Image
                     src={getProductTypeImageUrl(selectedManualKey)}
                     alt=""
+                    width={32}
+                    height={32}
+                    unoptimized
                     className="h-8 w-8 rounded object-contain ring-1 ring-slate-200"
                   />
                 ) : null}
@@ -747,9 +754,12 @@ export function BatchItemsTableEditor({ items, importId }: Props) {
                   image_key: {modalImageState?.resolvedImageKey}
                 </p>
                 {modalImageState?.resolvedImageKey ? (
-                  <img
+                  <Image
                     src={getProductTypeImageUrl(modalImageState.resolvedImageKey)}
                     alt=""
+                    width={56}
+                    height={56}
+                    unoptimized
                     className="h-14 w-14 rounded-lg object-contain ring-1 ring-slate-200"
                   />
                 ) : null}

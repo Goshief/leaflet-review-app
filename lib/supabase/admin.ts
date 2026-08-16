@@ -5,6 +5,9 @@ let cached: SupabaseClient | null | undefined;
 /**
  * Server-only klient s oprávněním služby (obchází RLS).
  * Vyžaduje NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.
+ *
+ * Nesmí se importovat z browser Auth klientů ani Client Components.
+ * Nepoužívat pro přihlášení uživatele ani session cookies.
  */
 export function getSupabaseAdmin(): SupabaseClient | null {
   if (cached) return cached;

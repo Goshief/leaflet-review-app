@@ -15,13 +15,19 @@ export type BatchItemImageState = {
   imageStatusMessage: string;
 };
 
+/**
+ * UI/server readiness for a batch item image.
+ *
+ * Accepts known catalog slugs OR syntactically valid Storage filenames
+ * (same contract as `isValidImageKey` / manual override writes).
+ * This is NOT a Storage object-existence probe.
+ */
 export function resolveBatchItemImageState(item: BatchItemImageLike): BatchItemImageState {
   const approved = item.approved_image_key ?? null;
   const suggested = item.suggested_image_key ?? null;
-  const resolved = approved || suggested || null;
-  const valid = isValidImageKey(resolved);
+  const resolved = (approved || suggested || "").trim() || null;
 
-  if (!valid) {
+  if (!isValidImageKey(resolved)) {
     return {
       resolvedImageKey: null,
       hasValidImage: false,
@@ -38,9 +44,6 @@ export function resolveBatchItemImageState(item: BatchItemImageLike): BatchItemI
   };
 }
 
-export function canBatchItemRunSaveAction(_item: BatchItemImageLike): boolean {
-  // Ruční editace a vytvoření položky nesmí být blokované chybějícím obrázkem.
-  // Validní image key se dál vyžaduje pouze pro image-review akce typu approve/manual_override
-  // v serverové logice.
-  return true;
+export function canBatchItemRunSaveAction(item: BatchItemImageLike): boolean {
+  return resolveBatchItemImageState(item).hasValidImage;
 }
