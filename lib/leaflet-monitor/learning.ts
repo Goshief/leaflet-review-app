@@ -5,6 +5,7 @@ export type CheckStatus = "downloaded" | "unchanged" | "error" | "skipped";
 export type LearningObservation = {
   checked_at: string;
   status: CheckStatus;
+  visited_url?: string | null;
 };
 
 export type RetailerLearningState = {
@@ -16,13 +17,15 @@ export type RetailerLearningState = {
   preferred_weekdays: number[];
   confidence: number;
   last_check_at: string | null;
+  last_visit_at: string | null;
+  last_visit_url: string | null;
   last_downloaded_at: string | null;
   next_check_at: string | null;
   updated_at: string;
 };
 
 const MS_DAY = 86_400_000;
-const DEFAULT_EXPLORATION_DAYS = [1, 4]; // Monday + Thursday, Europe/Prague-local approximation.
+const DEFAULT_EXPLORATION_DAYS = [1, 4];
 
 function isoWeekKey(date: Date): string {
   const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -65,6 +68,8 @@ export function emptyLearningState(retailer: RetailerId): RetailerLearningState 
     preferred_weekdays: DEFAULT_EXPLORATION_DAYS,
     confidence: 0,
     last_check_at: null,
+    last_visit_at: null,
+    last_visit_url: null,
     last_downloaded_at: null,
     next_check_at: nextPreferredDate(now, DEFAULT_EXPLORATION_DAYS).toISOString(),
     updated_at: now.toISOString(),
@@ -76,9 +81,10 @@ export function recordObservation(
   retailer: RetailerId,
   status: CheckStatus,
   checkedAt = new Date().toISOString(),
+  visitedUrl: string | null = null,
 ): RetailerLearningState {
   const state = previous ?? emptyLearningState(retailer);
-  const observations = [...state.observations, { checked_at: checkedAt, status }].slice(-32);
+  const observations = [...state.observations, { checked_at: checkedAt, status, visited_url: visitedUrl }].slice(-32);
   const hits = [...state.weekday_download_hits];
   if (status === "downloaded") {
     const day = weekdayPrague(checkedAt);
@@ -103,6 +109,8 @@ export function recordObservation(
     preferred_weekdays: preferred.length ? preferred : DEFAULT_EXPLORATION_DAYS,
     confidence,
     last_check_at: checkedAt,
+    last_visit_at: visitedUrl ? checkedAt : (state.last_visit_at ?? null),
+    last_visit_url: visitedUrl || state.last_visit_url || null,
     last_downloaded_at: status === "downloaded" ? checkedAt : state.last_downloaded_at,
     next_check_at: nextPreferredDate(now, preferred.length ? preferred : DEFAULT_EXPLORATION_DAYS).toISOString(),
     updated_at: new Date().toISOString(),
