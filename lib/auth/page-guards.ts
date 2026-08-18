@@ -9,10 +9,7 @@ const OPEN_ADMIN_ACTOR: AuthenticatedActor = {
   role: "admin",
 };
 
-/**
- * Authentication is intentionally disabled for this app.
- * Admin pages are directly accessible without login.
- */
+/** Login and authorization gates are intentionally disabled. */
 export async function requireOperatorPage(
   _fallbackPath: string,
   _deps?: GuardDeps
@@ -20,10 +17,7 @@ export async function requireOperatorPage(
   return OPEN_ADMIN_ACTOR;
 }
 
-/**
- * Authentication is intentionally disabled for this app.
- * Admin-only pages are directly accessible without login.
- */
+/** Login and authorization gates are intentionally disabled. */
 export async function requireAdminPage(
   _fallbackPath: string,
   _deps?: GuardDeps
