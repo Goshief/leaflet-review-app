@@ -1,11 +1,34 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
-import { LOGIN_UNAVAILABLE_ERROR } from "@/lib/auth/login-rate-limit";
+import { createClient } from "@/lib/supabase/client";
+
+const GENERIC_LOGIN_ERROR =
+  "Přihlášení se nezdařilo. Zkontrolujte údaje a zkuste to znovu.";
+const LOGIN_UNAVAILABLE_ERROR =
+  "Přihlášení je dočasně nedostupné. Zkuste to prosím později.";
+const LOGIN_TIMEOUT_MS = 15000;
 
 type LoginFormProps = {
   nextPath: string;
 };
+
+async function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("login_timeout")),
+          LOGIN_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export function LoginForm({ nextPath }: LoginFormProps) {
   const [error, setError] = useState<string | null>(null);
@@ -17,33 +40,27 @@ export function LoginForm({ nextPath }: LoginFormProps) {
     setError(null);
 
     const form = new FormData(event.currentTarget);
+    const email = String(form.get("email") ?? "").trim();
+    const password = String(form.get("password") ?? "");
+
+    if (!email || !password) {
+      setError(GENERIC_LOGIN_ERROR);
+      setPending(false);
+      return;
+    }
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: form.get("email"),
-          password: form.get("password"),
-          next: form.get("next"),
-        }),
-      });
+      const supabase = createClient();
+      const { data, error: authError } = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password })
+      );
 
-      const payload: unknown = await response.json();
-      if (response.ok && payload && typeof payload === "object") {
-        const redirectTo = (payload as Record<string, unknown>).redirectTo;
-        if (typeof redirectTo === "string") {
-          window.location.assign(redirectTo);
-          return;
-        }
+      if (authError || !data.session || !data.user) {
+        setError(GENERIC_LOGIN_ERROR);
+        return;
       }
 
-      const message =
-        payload && typeof payload === "object"
-          ? (payload as Record<string, unknown>).error
-          : null;
-      setError(typeof message === "string" ? message : LOGIN_UNAVAILABLE_ERROR);
+      window.location.assign(nextPath || "/upload");
     } catch {
       setError(LOGIN_UNAVAILABLE_ERROR);
     } finally {
