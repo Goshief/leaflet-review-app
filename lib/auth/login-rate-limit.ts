@@ -7,6 +7,7 @@ const EMAIL_LIMIT = 5;
 const IP_LIMIT = 20;
 const WINDOW_SECONDS = 15 * 60;
 const BLOCK_SECONDS = 15 * 60;
+const RPC_TIMEOUT_MS = 4000;
 
 type RpcError = { message?: string } | null;
 
@@ -59,24 +60,37 @@ function readRpcRow(data: unknown): { allowed: boolean; retryAfter: number } | n
   };
 }
 
+async function withRpcTimeout<T>(operation: PromiseLike<T>): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(operation),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), RPC_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function consumeKey(
   client: LoginRateLimitClient,
   keyHash: string,
   limit: number
 ): Promise<{ ok: true } | { ok: false; retryAfter: number } | null> {
-  let response;
-  try {
-    response = await client.rpc("consume_login_rate_limit", {
+  const response = await withRpcTimeout(
+    client.rpc("consume_login_rate_limit", {
       p_key_hash: keyHash,
       p_limit: limit,
       p_window_seconds: WINDOW_SECONDS,
       p_block_seconds: BLOCK_SECONDS,
-    });
-  } catch {
-    return null;
-  }
+    })
+  );
 
-  if (response.error) return null;
+  if (!response || response.error) return null;
   const result = readRpcRow(response.data);
   if (!result) return null;
   return result.allowed ? { ok: true } : { ok: false, retryAfter: result.retryAfter };
@@ -114,9 +128,8 @@ export async function clearSuccessfulLoginRateLimit(
   client: LoginRateLimitClient,
   emailKeyHash: string
 ): Promise<void> {
-  try {
-    await client.rpc("clear_login_rate_limit", { p_key_hash: emailKeyHash });
-  } catch {
-    // Cleanup is best-effort after a successful authentication.
-  }
+  // Cleanup must never delay a successful login response.
+  void withRpcTimeout(
+    client.rpc("clear_login_rate_limit", { p_key_hash: emailKeyHash })
+  );
 }
