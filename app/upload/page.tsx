@@ -1,4 +1,4 @@
-import { UploadForm } from "@/components/leaflet/upload-form";
+import { UploadFormStorage } from "@/components/leaflet/upload-form-storage";
 
 export default function UploadPage() {
   return (
@@ -9,10 +9,10 @@ export default function UploadPage() {
       <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
         Nahraj <strong className="font-semibold text-slate-800">PDF celého letáku</strong>{" "}
         nebo <strong className="font-semibold text-slate-800">obrázek</strong> stránky.
-        V kontrole zvolíš <strong>OCR</strong> (bez AI) nebo <strong>vision API</strong>.
+        Soubor se nahrává přímo do Supabase Storage, takže velké PDF nejde přes limit Vercelu.
       </p>
       <div className="mt-10">
-        <UploadForm />
+        <UploadFormStorage />
       </div>
     </main>
   );
