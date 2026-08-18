@@ -1,4 +1,4 @@
-const DEFAULT_NEXT = "/";
+const DEFAULT_NEXT = "/upload";
 
 /**
  * Allow only same-origin relative paths. Rejects open redirects such as
