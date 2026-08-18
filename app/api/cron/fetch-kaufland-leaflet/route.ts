@@ -1,14 +1,20 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  recordObservation,
+  shouldVisitRetailer,
+  type RetailerLearningState,
+} from "@/lib/leaflet-monitor/learning";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const BUCKET = "leaflet-intake";
-const RETAILER = "kaufland";
+const RETAILER = "kaufland" as const;
 const SOURCE_PAGE = "https://prodejny.kaufland.cz/letak.html";
-const CRON_SCHEDULE = "13 7 * * 0";
+const CRON_SCHEDULE = "13 7 * * *";
+const LEARNING_PATH = `_learning/${RETAILER}.json`;
 const USER_AGENT =
   "Mozilla/5.0 (compatible; LeafletReviewApp/1.0; +https://leaflet-review-app.vercel.app)";
 
@@ -43,9 +49,6 @@ function extractKauflandFlyerUrl(html: string): string | null {
     return { href, text };
   });
 
-  // Prefer the main grocery flyer, not the non-food catalogue. On Kaufland's
-  // page the future flyer is listed before the current flyer, so the first
-  // matching main offer is exactly what we want to prefetch once a week.
   const main = candidates.find((x) => /Akční\s+nabídka/i.test(x.text));
   return main?.href || candidates[0]?.href || null;
 }
@@ -64,12 +67,8 @@ function extractPdfCandidates(html: string, baseUrl: string): string[] {
     }
   };
 
-  for (const match of html.matchAll(/https?:\\?\/?\\?\/?[^"'<>\s]+?\.pdf(?:\?[^"'<>\s]*)?/gi)) {
-    add(match[0] ?? "");
-  }
-  for (const match of html.matchAll(/(?:href|src|downloadUrl|pdfUrl|pdf_url)["']?\s*[:=]\s*["']([^"']+)["']/gi)) {
-    add(match[1] ?? "");
-  }
+  for (const match of html.matchAll(/https?:\\?\/?\\?\/?[^"'<>\s]+?\.pdf(?:\?[^"'<>\s]*)?/gi)) add(match[0] ?? "");
+  for (const match of html.matchAll(/(?:href|src|downloadUrl|pdfUrl|pdf_url)["']?\s*[:=]\s*["']([^"']+)["']/gi)) add(match[1] ?? "");
   for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
     const label = (match[2] ?? "").replace(/<[^>]+>/g, " ");
     if (/pdf|download|stáhn/i.test(label)) add(match[1] ?? "");
@@ -109,7 +108,6 @@ async function resolvePdf(flyerUrl: string): Promise<{ url: string; bytes: Uint8
 
   const html = new TextDecoder().decode(viewerBytes);
   const candidates = extractPdfCandidates(html, viewer.url || flyerUrl);
-
   for (const candidate of candidates.slice(0, 8)) {
     try {
       const pdf = await fetchWithTimeout(candidate);
@@ -117,14 +115,11 @@ async function resolvePdf(flyerUrl: string): Promise<{ url: string; bytes: Uint8
       const bytes = new Uint8Array(await pdf.arrayBuffer());
       const contentType = pdf.headers.get("content-type") ?? "";
       const signature = new TextDecoder().decode(bytes.slice(0, 5));
-      if (contentType.includes("application/pdf") || signature === "%PDF-") {
-        return { url: pdf.url || candidate, bytes };
-      }
+      if (contentType.includes("application/pdf") || signature === "%PDF-") return { url: pdf.url || candidate, bytes };
     } catch {
       // Try the next PDF candidate.
     }
   }
-
   throw new Error("Na stránce letáku se nepodařilo najít PDF ke stažení.");
 }
 
@@ -137,25 +132,51 @@ function todayPrague(): string {
   }).format(new Date());
 }
 
+async function readLearningState(supabase: any): Promise<RetailerLearningState | null> {
+  const { data, error } = await supabase.storage.from(BUCKET).download(LEARNING_PATH);
+  if (error || !data) return null;
+  try {
+    return JSON.parse(await data.text()) as RetailerLearningState;
+  } catch {
+    return null;
+  }
+}
+
+async function writeLearningState(supabase: any, state: RetailerLearningState) {
+  const { error } = await supabase.storage.from(BUCKET).upload(
+    LEARNING_PATH,
+    new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }),
+    { contentType: "application/json", upsert: true },
+  );
+  if (error) console.warn("[kaufland-leaflet-cron] learning state write failed", error.message);
+}
+
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET?.trim();
   const auth = req.headers.get("authorization") ?? "";
   const schedule = req.headers.get("x-vercel-cron-schedule") ?? "";
 
-  // If CRON_SECRET exists, require it. Until it is configured, accept only
-  // the exact Vercel cron schedule header; daily check markers below make
-  // repeated external calls idempotent even if the endpoint is probed.
   if (cronSecret) {
-    if (auth !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-    }
+    if (auth !== `Bearer ${cronSecret}`) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   } else if (schedule !== CRON_SCHEDULE) {
     return NextResponse.json({ ok: false, error: "Cron only" }, { status: 401 });
   }
 
   const supabase = getSupabaseAdmin();
-  if (!supabase) {
-    return NextResponse.json({ ok: false, error: "Supabase není nakonfigurovaný." }, { status: 503 });
+  if (!supabase) return NextResponse.json({ ok: false, error: "Supabase není nakonfigurovaný." }, { status: 503 });
+
+  const learning = await readLearningState(supabase);
+  const decision = shouldVisitRetailer(learning);
+  if (!decision.due) {
+    return NextResponse.json({
+      ok: true,
+      status: "adaptive_skip",
+      retailer: RETAILER,
+      reason: decision.reason,
+      checks_this_week: decision.checks_this_week,
+      next_check_at: learning?.next_check_at ?? null,
+      confidence: learning?.confidence ?? 0,
+    });
   }
 
   const checkDate = todayPrague();
@@ -168,6 +189,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, status: "already_checked_today", retailer: RETAILER });
   }
 
+  const checkedAt = new Date().toISOString();
+
   try {
     const page = await fetchWithTimeout(SOURCE_PAGE);
     if (!page.ok) throw new Error(`Kaufland source HTTP ${page.status}`);
@@ -177,26 +200,24 @@ export async function GET(req: Request) {
 
     const flyerKey = sanitize(new URL(flyerUrl).pathname) || createHash("sha256").update(flyerUrl).digest("hex").slice(0, 24);
     const folder = `${RETAILER}`;
-    const { data: existing } = await supabase.storage.from(BUCKET).list(folder, {
-      search: flyerKey,
-      limit: 20,
-    });
-
+    const { data: existing } = await supabase.storage.from(BUCKET).list(folder, { search: flyerKey, limit: 20 });
     const alreadyStored = (existing ?? []).some((x) => x.name.startsWith(`${flyerKey}__`));
+
     if (alreadyStored) {
       await supabase.storage.from(BUCKET).upload(
         checkMarker,
-        new Blob([JSON.stringify({ checked_at: new Date().toISOString(), retailer: RETAILER, flyer_url: flyerUrl, status: "unchanged" })], { type: "application/json" }),
-        { contentType: "application/json", upsert: true }
+        new Blob([JSON.stringify({ checked_at: checkedAt, retailer: RETAILER, flyer_url: flyerUrl, status: "unchanged" })], { type: "application/json" }),
+        { contentType: "application/json", upsert: true },
       );
-      return NextResponse.json({ ok: true, status: "unchanged", retailer: RETAILER, flyer_url: flyerUrl });
+      const nextLearning = recordObservation(learning, RETAILER, "unchanged", checkedAt);
+      await writeLearningState(supabase, nextLearning);
+      return NextResponse.json({ ok: true, status: "unchanged", retailer: RETAILER, flyer_url: flyerUrl, learning: nextLearning });
     }
 
     const pdf = await resolvePdf(flyerUrl);
     const sha256 = createHash("sha256").update(pdf.bytes).digest("hex");
     const filename = `${flyerKey}__${sha256.slice(0, 16)}.pdf`;
     const storagePath = `${folder}/${filename}`;
-
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, pdf.bytes, {
       contentType: "application/pdf",
       upsert: false,
@@ -206,21 +227,22 @@ export async function GET(req: Request) {
 
     await supabase.storage.from(BUCKET).upload(
       checkMarker,
-      new Blob([
-        JSON.stringify({
-          checked_at: new Date().toISOString(),
-          retailer: RETAILER,
-          status: "downloaded",
-          source_page: SOURCE_PAGE,
-          flyer_url: flyerUrl,
-          pdf_url: pdf.url,
-          sha256,
-          bytes: pdf.bytes.byteLength,
-          storage_path: storagePath,
-        }),
-      ], { type: "application/json" }),
-      { contentType: "application/json", upsert: true }
+      new Blob([JSON.stringify({
+        checked_at: checkedAt,
+        retailer: RETAILER,
+        status: "downloaded",
+        source_page: SOURCE_PAGE,
+        flyer_url: flyerUrl,
+        pdf_url: pdf.url,
+        sha256,
+        bytes: pdf.bytes.byteLength,
+        storage_path: storagePath,
+      })], { type: "application/json" }),
+      { contentType: "application/json", upsert: true },
     );
+
+    const nextLearning = recordObservation(learning, RETAILER, "downloaded", checkedAt);
+    await writeLearningState(supabase, nextLearning);
 
     return NextResponse.json({
       ok: true,
@@ -229,15 +251,18 @@ export async function GET(req: Request) {
       bytes: pdf.bytes.byteLength,
       storage_path: storagePath,
       flyer_url: flyerUrl,
+      learning: nextLearning,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await supabase.storage.from(BUCKET).upload(
       checkMarker,
-      new Blob([JSON.stringify({ checked_at: new Date().toISOString(), retailer: RETAILER, status: "error", error: message })], { type: "application/json" }),
-      { contentType: "application/json", upsert: true }
+      new Blob([JSON.stringify({ checked_at: checkedAt, retailer: RETAILER, status: "error", error: message })], { type: "application/json" }),
+      { contentType: "application/json", upsert: true },
     );
+    const nextLearning = recordObservation(learning, RETAILER, "error", checkedAt);
+    await writeLearningState(supabase, nextLearning);
     console.error("[kaufland-leaflet-cron]", message);
-    return NextResponse.json({ ok: false, retailer: RETAILER, error: message }, { status: 502 });
+    return NextResponse.json({ ok: false, retailer: RETAILER, error: message, learning: nextLearning }, { status: 502 });
   }
 }
