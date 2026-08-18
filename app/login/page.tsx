@@ -18,7 +18,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = (await searchParams) ?? {};
   const rawNext = params.next;
   const nextValue = Array.isArray(rawNext) ? rawNext[0] : rawNext;
-  const nextPath = resolveSafeNextPath(nextValue);
+  const resolvedNext = resolveSafeNextPath(nextValue);
+  // The public homepage currently depends on a slow offers query. Admin login
+  // must always land on a responsive admin route instead of waiting on `/`.
+  const nextPath = resolvedNext === "/" ? "/upload" : resolvedNext;
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
