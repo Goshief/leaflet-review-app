@@ -6,7 +6,6 @@ export type ParserPromptRecord = {
   title: string;
   subtitle: string;
   prompt: string;
-  // store-level config (defaults for review / extraction)
   config?: {
     default_extract?: "ocr" | "vision" | "local";
     enabled?: boolean;
@@ -41,8 +40,8 @@ function promptsPath(): string {
 async function readDb(): Promise<ParserPromptsDb> {
   const p = promptsPath();
   const dir = path.dirname(p);
-  await fs.mkdir(dir, { recursive: true });
-  const raw = await fs.readFile(p, "utf8").catch(() => "");
+  await fs.mkdir(/* turbopackIgnore: true */ dir, { recursive: true });
+  const raw = await fs.readFile(/* turbopackIgnore: true */ p, "utf8").catch(() => "");
   if (!raw.trim()) {
     return { version: 2, prompts: [] };
   }
@@ -54,7 +53,6 @@ async function readDb(): Promise<ParserPromptsDb> {
     if (!parsed || !Array.isArray(parsed.prompts)) {
       return { version: 2, prompts: [] };
     }
-    // migrate v1 -> v2
     if (parsed.version === 1) {
       const migrated: ParserPromptsDb = {
         version: 2,
@@ -81,8 +79,8 @@ async function readDb(): Promise<ParserPromptsDb> {
 async function writeDb(db: ParserPromptsDb): Promise<void> {
   const p = promptsPath();
   const dir = path.dirname(p);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(p, JSON.stringify(db, null, 2), "utf8");
+  await fs.mkdir(/* turbopackIgnore: true */ dir, { recursive: true });
+  await fs.writeFile(/* turbopackIgnore: true */ p, JSON.stringify(db, null, 2), "utf8");
 }
 
 export async function listPrompts(): Promise<ParserPromptRecord[]> {
@@ -149,4 +147,3 @@ export async function upsertPrompt(input: {
   await writeDb(db);
   return rec;
 }
-
