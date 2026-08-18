@@ -10,6 +10,8 @@ const SESSION_CACHE_HEADERS: Record<string, string> = {
   Pragma: "no-cache",
 };
 
+const CLAIMS_TIMEOUT_MS = 5000;
+
 function nextWithPathname(request: NextRequest): NextResponse {
   const requestHeaders = new Headers(request.headers);
   const pathWithSearch = `${request.nextUrl.pathname}${request.nextUrl.search}`;
@@ -21,24 +23,27 @@ function nextWithPathname(request: NextRequest): NextResponse {
   }));
 }
 
-/**
- * Refresh / verify the Auth session for the current request.
- *
- * Point 02/04: Proxy only maintains the SSR session (getClaims + cookies).
- * Definitive operator/admin authorization runs in page layouts and each
- * sensitive API Route Handler via requireOperatorApi / requireAdminApi —
- * Proxy is not the sole authorization layer and does not re-fetch the Auth user.
- *
- * Also forwards the request path via x-leaflet-pathname so page guards can
- * preserve deep links in /login?next=...
- */
+async function verifyClaimsWithoutFreezing(operation: Promise<unknown>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      operation,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, CLAIMS_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    // Authorization remains fail-closed in page/API guards.
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   let supabaseResponse = nextWithPathname(request);
 
   const env = getPublicSupabaseEnv();
-  if (!env) {
-    return supabaseResponse;
-  }
+  if (!env) return supabaseResponse;
 
   const supabase = createServerClient(env.url, env.publishableKey, {
     cookies: {
@@ -53,8 +58,6 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
         cookiesToSet.forEach(({ name, value, options }) => {
           supabaseResponse.cookies.set(name, value, options);
         });
-        // @supabase/ssr 0.9.x (peer-compatible with supabase-js 2.100.0) does not
-        // pass cache headers into setAll; apply them manually per advanced guide.
         Object.entries(SESSION_CACHE_HEADERS).forEach(([key, value]) => {
           supabaseResponse.headers.set(key, value);
         });
@@ -62,8 +65,6 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     },
   });
 
-  // Validates / refreshes the JWT. Do not authorize from an unverified session user object.
-  await supabase.auth.getClaims();
-
+  await verifyClaimsWithoutFreezing(supabase.auth.getClaims());
   return supabaseResponse;
 }
