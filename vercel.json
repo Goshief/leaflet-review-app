@@ -4,7 +4,7 @@
   "crons": [
     {
       "path": "/api/cron/fetch-kaufland-leaflet",
-      "schedule": "13 7 * * 0"
+      "schedule": "13 7 * * *"
     }
   ]
 }
