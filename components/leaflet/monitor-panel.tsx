@@ -15,6 +15,8 @@ type RetailerRow = {
     preferred_weekdays: number[];
     checks_this_week_limit: number;
     last_check_at: string | null;
+    last_visit_at: string | null;
+    last_visit_url: string | null;
     last_downloaded_at: string | null;
     next_check_at: string | null;
     download_hits: number[];
@@ -67,7 +69,7 @@ export function LeafletMonitorPanel() {
         <div>
           <h2 className="text-xl font-bold text-slate-900">Automatické hlídání letáků</h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Systém si ukládá, kdy našel nový leták, učí se typické dny zveřejnění a omezuje návštěvy webu na maximálně 2 týdně na obchod.
+            Systém eviduje každou skutečnou návštěvu webu obchodu, učí se dny zveřejnění a na každý obchod pustí robota maximálně 2× týdně.
           </p>
         </div>
         <button type="button" onClick={() => void load()} disabled={loading} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">
@@ -89,12 +91,14 @@ export function LeafletMonitorPanel() {
             <p className="mt-3 text-sm font-semibold text-slate-800">{statusLabel(row)}</p>
             <dl className="mt-3 space-y-2 text-xs text-slate-600">
               <div><dt className="font-semibold text-slate-500">PDF v úložišti</dt><dd>{row.pdf_count}</dd></div>
-              <div><dt className="font-semibold text-slate-500">Poslední kontrola</dt><dd>{when(row.learning.last_check_at)}</dd></div>
-              <div><dt className="font-semibold text-slate-500">Další doporučená</dt><dd>{when(row.learning.next_check_at)}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Robot naposledy na webu</dt><dd>{when(row.learning.last_visit_at)}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Poslední výsledek kontroly</dt><dd>{when(row.learning.last_check_at)}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Poslední nový leták</dt><dd>{when(row.learning.last_downloaded_at)}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Další doporučená návštěva</dt><dd>{when(row.learning.next_check_at)}</dd></div>
               <div><dt className="font-semibold text-slate-500">Naučené dny</dt><dd>{row.learning.preferred_weekdays.map((d) => DAYS[d] ?? "?").join(" + ")}</dd></div>
               <div><dt className="font-semibold text-slate-500">Jistota učení</dt><dd>{Math.round((row.learning.confidence ?? 0) * 100)} %</dd></div>
             </dl>
-            <a href={row.source_url} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-semibold text-indigo-600 hover:underline">Web obchodu ↗</a>
+            <a href={row.learning.last_visit_url || row.source_url} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-semibold text-indigo-600 hover:underline">Poslední kontrolovaný web ↗</a>
           </article>
         ))}
       </div>
