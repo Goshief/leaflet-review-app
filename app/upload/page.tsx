@@ -1,5 +1,6 @@
 import { UploadFormStorage } from "@/components/leaflet/upload-form-storage";
 import { LeafletMonitorPanel } from "@/components/leaflet/monitor-panel";
+import { LeafletHistoryPanel } from "@/components/leaflet/history-panel";
 
 export default function UploadPage() {
   return (
@@ -14,6 +15,8 @@ export default function UploadPage() {
       <div className="mt-8">
         <LeafletMonitorPanel />
       </div>
+
+      <LeafletHistoryPanel />
 
       <div className="mx-auto mt-10 max-w-3xl">
         <UploadFormStorage />
