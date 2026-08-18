@@ -1,3 +1,4 @@
+import { DirectIntakeUploadShim } from "@/components/intake/direct-upload-shim";
 import { requireOperatorPage } from "@/lib/auth/page-guards";
 
 export default async function UploadLayout({
@@ -6,5 +7,10 @@ export default async function UploadLayout({
   children: React.ReactNode;
 }) {
   await requireOperatorPage("/upload");
-  return children;
+  return (
+    <>
+      <DirectIntakeUploadShim />
+      {children}
+    </>
+  );
 }
