@@ -26,19 +26,35 @@ export async function GET() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return NextResponse.json({ ok: false, error: "Supabase není nakonfigurovaný." }, { status: 503 });
 
-  const rows = await Promise.all(RETAILERS.map(async (retailer) => {
+  const rows: any[] = [];
+  let storageDegraded = false;
+
+  // Intentionally serial: the old Promise.all fan-out generated many simultaneous
+  // Storage DB requests and made an already saturated Supabase connection pool worse.
+  for (const retailer of RETAILERS) {
     const learning = await readJson<RetailerLearningState>(supabase, `_learning/${retailer.id}.json`) ?? emptyLearningState(retailer.id);
-    const { data: files } = await supabase.storage.from(BUCKET).list(retailer.id, { limit: 100, sortBy: { column: "created_at", order: "desc" } });
-    const pdfs = (files ?? []).filter((x: any) => x.name?.toLowerCase().endsWith(".pdf"));
-    const states = (files ?? []).filter((x: any) => x.name?.endsWith(".ai-state.json"));
+
+    const listResult = await supabase.storage.from(BUCKET).list(retailer.id, {
+      limit: 100,
+      sortBy: { column: "created_at", order: "desc" },
+    });
+    if (listResult.error) storageDegraded = true;
+    const files = listResult.data ?? [];
+    const pdfs = files.filter((x: any) => x.name?.toLowerCase().endsWith(".pdf"));
+    const states = files.filter((x: any) => x.name?.endsWith(".ai-state.json"));
     let aiState: any = null;
     if (states[0]?.name) aiState = await readJson<any>(supabase, `${retailer.id}/${states[0].name}`);
 
-    const { data: checks } = await supabase.storage.from(BUCKET).list("_checks", { search: `${retailer.id}-`, limit: 100, sortBy: { column: "created_at", order: "desc" } });
-    const lastCheckName = checks?.[0]?.name ?? null;
+    const checksResult = await supabase.storage.from(BUCKET).list("_checks", {
+      search: `${retailer.id}-`,
+      limit: 20,
+      sortBy: { column: "created_at", order: "desc" },
+    });
+    if (checksResult.error) storageDegraded = true;
+    const lastCheckName = checksResult.data?.[0]?.name ?? null;
     const lastCheck = lastCheckName ? await readJson<any>(supabase, `_checks/${lastCheckName}`) : null;
 
-    return {
+    rows.push({
       ...retailer,
       pdf_count: pdfs.length,
       latest_pdf: pdfs[0]?.name ?? null,
@@ -60,8 +76,13 @@ export async function GET() {
         completed: Boolean(aiState.completed),
         next_page: aiState.next_page ?? null,
       } : null,
-    };
-  }));
+    });
+  }
 
-  return NextResponse.json({ ok: true, retailers: rows });
+  return NextResponse.json({
+    ok: true,
+    retailers: rows,
+    storage_status: storageDegraded ? "degraded" : "ok",
+    warning: storageDegraded ? "Supabase Storage je přetížený; některé stavy nemusí být dostupné." : null,
+  });
 }
