@@ -6,14 +6,6 @@ import {
   type OperatorRole,
 } from "./roles.ts";
 
-/**
- * Discriminated authorization actor.
- *
- * Identity comes from verified claims (point 02). Role comes from a fresh
- * Auth-server user record (`getUser().app_metadata.role`) — never from
- * `user_metadata`, never from an unverified session user object, never from service role.
- */
-
 export type AuthenticatedActor = {
   authenticated: true;
   authorized: true;
@@ -53,6 +45,8 @@ export type AuthActorClient = AuthClaimsClient & {
   };
 };
 
+const AUTH_USER_TIMEOUT_MS = 5000;
+
 function deny(
   authenticated: boolean,
   reason: UnauthorizedActor["reason"]
@@ -60,65 +54,55 @@ function deny(
   return { authenticated, authorized: false, reason };
 }
 
-/**
- * Resolve a trusted actor for privileged administration checks.
- * Fail-closed on every ambiguity. Does not log tokens or Auth user payloads.
- */
+async function getUserWithTimeout(client: AuthActorClient) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      client.auth.getUser(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), AUTH_USER_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function getAuthenticatedActor(
   client: AuthActorClient | null
 ): Promise<AuthActor> {
-  if (!client) {
-    return deny(false, "missing_config");
-  }
+  if (!client) return deny(false, "missing_config");
 
   const identity = await getAuthenticatedUser(client);
   if (!identity.authenticated) {
-    if (identity.reason === "missing_config") {
-      return deny(false, "missing_config");
-    }
-    if (identity.reason === "invalid_token") {
-      return deny(false, "invalid_token");
-    }
+    if (identity.reason === "missing_config") return deny(false, "missing_config");
+    if (identity.reason === "invalid_token") return deny(false, "invalid_token");
     return deny(false, "unauthenticated");
   }
 
-  let userResult: Awaited<ReturnType<AuthActorClient["auth"]["getUser"]>>;
-  try {
-    userResult = await client.auth.getUser();
-  } catch {
-    return deny(true, "auth_server_error");
-  }
-
-  if (userResult.error || !userResult.data.user) {
+  const userResult = await getUserWithTimeout(client);
+  if (!userResult || userResult.error || !userResult.data.user) {
     return deny(true, "auth_server_error");
   }
 
   const user = userResult.data.user;
-  if (user.id !== identity.userId) {
-    return deny(true, "user_mismatch");
-  }
+  if (user.id !== identity.userId) return deny(true, "user_mismatch");
 
-  // Explicitly ignore user-editable metadata for authorization.
   void user.user_metadata;
 
-  if (user.app_metadata == null) {
-    return deny(true, "missing_role");
-  }
+  if (user.app_metadata == null) return deny(true, "missing_role");
 
   const role = parseOperatorRole(user.app_metadata);
   if (!role) {
-    // Distinguishes absent/empty vs present-but-invalid when useful for tests.
     const rawRole =
       typeof user.app_metadata === "object" &&
       user.app_metadata !== null &&
       !Array.isArray(user.app_metadata)
         ? (user.app_metadata as Record<string, unknown>).role
         : undefined;
-
-    if (rawRole === undefined) {
-      return deny(true, "missing_role");
-    }
-    return deny(true, "invalid_role");
+    return deny(true, rawRole === undefined ? "missing_role" : "invalid_role");
   }
 
   const email =
