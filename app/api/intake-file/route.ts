@@ -1,21 +1,11 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { requireOperatorApi } from "@/lib/auth/guards";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function mimeFromExt(ext: string): string {
-  const e = ext.toLowerCase();
-  if (e === "pdf") return "application/pdf";
-  if (e === "png") return "image/png";
-  if (e === "webp") return "image/webp";
-  if (e === "gif") return "image/gif";
-  if (e === "jpg" || e === "jpeg") return "image/jpeg";
-  return "application/octet-stream";
-}
+const BUCKET = "leaflet-intake";
 
 export async function GET(req: Request) {
   const gate = await requireOperatorApi();
@@ -27,28 +17,37 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "Chybí intake_id" }, { status: 400 });
   }
 
-  const baseDir =
-    process.env.LEAFLET_INTAKE_DIR?.trim() || path.join(os.tmpdir(), "leaflet-intake");
-  const entries = await fs.readdir(baseDir).catch(() => []);
-  const match = entries.find((n) => n.startsWith(`${intake_id}.`));
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json(
+      { ok: false, error: "Supabase Storage není nakonfigurovaný." },
+      { status: 503 }
+    );
+  }
+
+  const { data: files, error: listError } = await supabase.storage
+    .from(BUCKET)
+    .list("", { search: intake_id, limit: 10 });
+
+  if (listError) {
+    return NextResponse.json({ ok: false, error: listError.message }, { status: 502 });
+  }
+
+  const match = (files ?? []).find((file) => file.name.startsWith(`${intake_id}.`));
   if (!match) {
     return NextResponse.json(
-      { ok: false, error: "intake_id nenalezen (soubor už může být smazaný)." },
+      { ok: false, error: "intake_id nenalezen ve Storage." },
       { status: 404 }
     );
   }
 
-  const stored_path = path.join(baseDir, match);
-  const buf = await fs.readFile(stored_path);
-  const ext = match.toLowerCase().split(".").pop() || "";
-  const mime = mimeFromExt(ext);
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(match.name, 600);
+  if (error || !data?.signedUrl) {
+    return NextResponse.json(
+      { ok: false, error: error?.message ?? "Nepodařilo se vytvořit odkaz na soubor." },
+      { status: 502 }
+    );
+  }
 
-  return new NextResponse(buf, {
-    status: 200,
-    headers: {
-      "Content-Type": mime,
-      "Cache-Control": "no-store",
-    },
-  });
+  return NextResponse.redirect(data.signedUrl, 307);
 }
-
