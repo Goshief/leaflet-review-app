@@ -21,31 +21,12 @@ export type UnauthorizedActor = {
     | "missing_config"
     | "unauthenticated"
     | "invalid_token"
-    | "auth_server_error"
-    | "user_mismatch"
     | "missing_role"
     | "invalid_role";
 };
 
 export type AuthActor = AuthenticatedActor | UnauthorizedActor;
-
-export type AuthActorClient = AuthClaimsClient & {
-  auth: AuthClaimsClient["auth"] & {
-    getUser: () => Promise<{
-      data: {
-        user: {
-          id: string;
-          email?: string | null;
-          app_metadata?: unknown;
-          user_metadata?: unknown;
-        } | null;
-      };
-      error: { message?: string } | null;
-    }>;
-  };
-};
-
-const AUTH_USER_TIMEOUT_MS = 5000;
+export type AuthActorClient = AuthClaimsClient;
 
 function deny(
   authenticated: boolean,
@@ -54,22 +35,12 @@ function deny(
   return { authenticated, authorized: false, reason };
 }
 
-async function getUserWithTimeout(client: AuthActorClient) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      client.auth.getUser(),
-      new Promise<null>((resolve) => {
-        timer = setTimeout(() => resolve(null), AUTH_USER_TIMEOUT_MS);
-      }),
-    ]);
-  } catch {
-    return null;
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
+/**
+ * Resolve an operator/admin from cryptographically verified JWT claims.
+ * This deliberately avoids auth.getUser(), because that endpoint is backed by
+ * the Auth database and must not block every admin page when Postgres is slow.
+ * Role changes take effect when the access token is refreshed.
+ */
 export async function getAuthenticatedActor(
   client: AuthActorClient | null
 ): Promise<AuthActor> {
@@ -82,39 +53,22 @@ export async function getAuthenticatedActor(
     return deny(false, "unauthenticated");
   }
 
-  const userResult = await getUserWithTimeout(client);
-  if (!userResult || userResult.error || !userResult.data.user) {
-    return deny(true, "auth_server_error");
-  }
-
-  const user = userResult.data.user;
-  if (user.id !== identity.userId) return deny(true, "user_mismatch");
-
-  void user.user_metadata;
-
-  if (user.app_metadata == null) return deny(true, "missing_role");
-
-  const role = parseOperatorRole(user.app_metadata);
+  const role = parseOperatorRole(identity.appMetadata);
   if (!role) {
     const rawRole =
-      typeof user.app_metadata === "object" &&
-      user.app_metadata !== null &&
-      !Array.isArray(user.app_metadata)
-        ? (user.app_metadata as Record<string, unknown>).role
+      typeof identity.appMetadata === "object" &&
+      identity.appMetadata !== null &&
+      !Array.isArray(identity.appMetadata)
+        ? (identity.appMetadata as Record<string, unknown>).role
         : undefined;
     return deny(true, rawRole === undefined ? "missing_role" : "invalid_role");
   }
-
-  const email =
-    typeof user.email === "string" && user.email.length > 0
-      ? user.email
-      : identity.email;
 
   return {
     authenticated: true,
     authorized: true,
     userId: identity.userId,
-    email,
+    email: identity.email,
     role,
   };
 }
