@@ -28,6 +28,24 @@ export type AuthClaimsClient = {
   };
 };
 
+const AUTH_CHECK_TIMEOUT_MS = 5000;
+
+async function withAuthTimeout<T>(promise: Promise<T>): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), AUTH_CHECK_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function readStringClaim(claims: Record<string, unknown>, key: string): string | null {
   const value = claims[key];
   return typeof value === "string" && value.length > 0 ? value : null;
@@ -45,7 +63,12 @@ export async function getAuthenticatedUser(
     return { authenticated: false, reason: "missing_config" };
   }
 
-  const { data, error } = await client.auth.getClaims();
+  const result = await withAuthTimeout(client.auth.getClaims());
+  if (!result) {
+    return { authenticated: false, reason: "invalid_token" };
+  }
+
+  const { data, error } = result;
 
   if (error || !data?.claims) {
     return { authenticated: false, reason: error ? "invalid_token" : "no_session" };
@@ -57,7 +80,6 @@ export async function getAuthenticatedUser(
     return { authenticated: false, reason: "invalid_token" };
   }
 
-  // Explicitly ignore user_metadata for any authorization decision.
   void claims.user_metadata;
 
   return {
