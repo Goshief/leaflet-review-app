@@ -2,14 +2,15 @@
  * Server-side identity verification.
  *
  * Trusts JWT validation via getClaims() — never the session user object from
- * cookie storage alone. Does not grant admin/operator roles (see `actor.ts` /
- * `roles.ts`) and ignores user_metadata for authorization.
+ * cookie storage alone. Roles may be read only from the cryptographically
+ * verified app_metadata claim, never from user_metadata.
  */
 
 export type AuthenticatedIdentity = {
   authenticated: true;
   userId: string;
   email: string | null;
+  appMetadata: unknown;
 };
 
 export type UnauthenticatedIdentity = {
@@ -51,11 +52,6 @@ function readStringClaim(claims: Record<string, unknown>, key: string): string |
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-/**
- * Verify the caller identity from a validated access token.
- * Does not read roles from user_metadata and does not treat an unverified
- * session user object as authorization proof.
- */
 export async function getAuthenticatedUser(
   client: AuthClaimsClient | null
 ): Promise<AuthIdentity> {
@@ -69,7 +65,6 @@ export async function getAuthenticatedUser(
   }
 
   const { data, error } = result;
-
   if (error || !data?.claims) {
     return { authenticated: false, reason: error ? "invalid_token" : "no_session" };
   }
@@ -80,11 +75,13 @@ export async function getAuthenticatedUser(
     return { authenticated: false, reason: "invalid_token" };
   }
 
+  // user_metadata is user-editable and must never grant privileges.
   void claims.user_metadata;
 
   return {
     authenticated: true,
     userId,
     email: readStringClaim(claims, "email"),
+    appMetadata: claims.app_metadata ?? null,
   };
 }
