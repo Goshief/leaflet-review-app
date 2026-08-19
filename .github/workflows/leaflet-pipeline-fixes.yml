@@ -1,0 +1,31 @@
+name: Leaflet pipeline fixes
+
+on:
+  push:
+    branches:
+      - fix/leaflet-pipeline-1-3-v2
+  pull_request:
+    paths:
+      - "lib/leaflet-review/**"
+      - "scripts/test-page-finalization.mts"
+      - "scripts/test-page-claim.mts"
+      - "tsconfig.json"
+      - ".github/workflows/leaflet-pipeline-fixes.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Strict page finalization regression
+        run: node --experimental-strip-types scripts/test-page-finalization.mts
+      - name: Exactly-once page claim regression
+        run: node --experimental-strip-types scripts/test-page-claim.mts
+      - name: TypeScript compile check
+        run: npx tsc --noEmit
