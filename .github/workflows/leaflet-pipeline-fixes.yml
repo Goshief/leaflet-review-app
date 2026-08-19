@@ -7,8 +7,10 @@ on:
   pull_request:
     paths:
       - "lib/leaflet-review/**"
+      - "lib/leaflet-monitor/retailers.ts"
       - "scripts/test-page-finalization.mts"
       - "scripts/test-page-claim.mts"
+      - "scripts/test-retailer-config.mts"
       - "tsconfig.json"
       - ".github/workflows/leaflet-pipeline-fixes.yml"
 
@@ -23,6 +25,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Retailer configuration regression
+        run: node --experimental-strip-types scripts/test-retailer-config.mts
       - name: Strict page finalization regression
         run: node --experimental-strip-types scripts/test-page-finalization.mts
       - name: Exactly-once page claim regression
