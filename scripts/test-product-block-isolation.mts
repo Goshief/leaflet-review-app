@@ -5,32 +5,42 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const repo = resolve(process.cwd());
-const sourcePath = join(repo, "lib/leaflet-review/extractor.ts");
-const typesUrl = pathToFileURL(join(repo, "lib/ocr/types.ts")).href;
-const anchorsUrl = pathToFileURL(join(repo, "lib/ocr/price-anchors.ts")).href;
-const parseUrl = pathToFileURL(join(repo, "lib/ocr/price-parse.ts")).href;
 const dir = await mkdtemp(join(tmpdir(), "leaflet-segmentation-"));
 
 try {
-  const source = (await readFile(sourcePath, "utf8"))
+  const tempTypes = join(dir, "types.mts");
+  const tempParse = join(dir, "price-parse.mts");
+  const tempAnchors = join(dir, "price-anchors.mts");
+  const tempExtractor = join(dir, "extractor.mts");
+
+  await writeFile(tempTypes, await readFile(join(repo, "lib/ocr/types.ts"), "utf8"), "utf8");
+  await writeFile(tempParse, await readFile(join(repo, "lib/ocr/price-parse.ts"), "utf8"), "utf8");
+
+  const typesUrl = pathToFileURL(tempTypes).href;
+  const parseUrl = pathToFileURL(tempParse).href;
+  const anchorsUrl = pathToFileURL(tempAnchors).href;
+
+  const anchorsSource = (await readFile(join(repo, "lib/ocr/price-anchors.ts"), "utf8"))
+    .replace('"./types"', JSON.stringify(typesUrl))
+    .replace('"./price-parse"', JSON.stringify(parseUrl));
+  await writeFile(tempAnchors, anchorsSource, "utf8");
+
+  const extractorSource = (await readFile(join(repo, "lib/leaflet-review/extractor.ts"), "utf8"))
     .replace('"@/lib/ocr/types"', JSON.stringify(typesUrl))
     .replace('"@/lib/ocr/price-anchors"', JSON.stringify(anchorsUrl))
     .replace('"@/lib/ocr/price-parse"', JSON.stringify(parseUrl));
-  const tempExtractor = join(dir, "extractor.mts");
-  await writeFile(tempExtractor, source, "utf8");
+  await writeFile(tempExtractor, extractorSource, "utf8");
+
   const { extractLeafletCandidates, EXTRACTOR_VERSION } = await import(pathToFileURL(tempExtractor).href);
 
   const word = (text: string, x: number, y: number, w: number, h: number) => ({ text, x, y, w, h });
   const words = [
-    // Product A — Kuře 49,90
     word("Kuře", 55, 74, 34, 12),
     word("cena", 56, 91, 24, 8), word("za", 84, 91, 13, 8), word("1", 101, 91, 6, 8), word("kg", 111, 91, 13, 8),
     word("49,90", 82, 104, 49, 28),
-    // Product B — Anglická slanina 39,90; intentionally close to A.
     word("Anglická", 163, 73, 53, 12), word("slanina", 220, 73, 43, 12),
     word("100", 165, 91, 19, 8), word("g", 188, 91, 7, 8),
     word("39,90", 185, 104, 49, 28),
-    // Noise close enough that a broad block could accidentally absorb it.
     word("Jihočeský", 274, 76, 58, 11), word("Tvaroh", 336, 76, 39, 11),
   ];
 
@@ -51,9 +61,10 @@ try {
   assert.match(baconText, /Anglická|slanina/i, "Anglická slanina must remain in its own block");
   assert.doesNotMatch(baconText, /Kuře|Tvaroh/i, "slanina block must not absorb neighboring product names");
 
+  const baconLines = String(bacon.source_text || "").split(" | ").filter(Boolean);
   const intersection = new Set(
     String(chicken.source_text || "").split(" | ").filter(Boolean)
-      .filter((x: string) => String(bacon.source_text || "").split(" | ").includes(x))
+      .filter((x: string) => baconLines.includes(x))
   );
   assert.equal(intersection.size, 0, "neighbor blocks must not share owned text lines");
 
