@@ -49,12 +49,13 @@ async function initializeState(args:{supabase:any;bucket:string;path:string;reta
   const{data:existingImport,error:lookupError}=await args.supabase.from("imports").select("id").eq("import_batch_key",batchKey).maybeSingle();
   if(lookupError)throw new Error(`Nelze dohledat existující import: ${lookupError.message}`);
   const openaiFileId=await uploadPdfToOpenAI(bytes,args.path.split("/").pop()||"leaflet.pdf");
-  let importId=existingImport?.id as string|undefined;
+  let importId:string|undefined=typeof existingImport?.id==="string"?existingImport.id:undefined;
   if(!importId){
     const{data:imp,error:impError}=await args.supabase.from("imports").insert({source_type:"leaflet",source_url:args.sourceUrl,note:`ai_page_pipeline | retailer:${args.retailer} | storage:${args.bucket}/${args.path}`,import_batch_key:batchKey,import_contract_version:"leaflet-ai-v1",import_contract_snapshot:{retailer:args.retailer,bucket:args.bucket,path:args.path,model:MODEL}}).select("id").single();
-    if(impError||!imp?.id){await deleteOpenAIFile(openaiFileId);throw new Error(impError?.message||"Nepodařilo se vytvořit import.");}
+    if(impError||typeof imp?.id!=="string"){await deleteOpenAIFile(openaiFileId);throw new Error(impError?.message||"Nepodařilo se vytvořit import.");}
     importId=imp.id;
   }
+  if(!importId){await deleteOpenAIFile(openaiFileId);throw new Error("Import nemá platné ID.");}
   const now=new Date().toISOString();
   const state:State={version:1,bucket:args.bucket,path:args.path,retailer:args.retailer,source_url:args.sourceUrl,import_id:importId,openai_file_id:openaiFileId,page_count:pageCount,next_page:1,processed_pages:[],completed:false,created_at:now,updated_at:now};
   await writeState(args.supabase,state);
