@@ -1,6 +1,6 @@
 export type RetailerId = "lidl" | "kaufland" | "penny" | "billa" | "albert";
 
-export type CheckStatus = "downloaded" | "unchanged" | "error" | "skipped";
+export type CheckStatus = "downloaded" | "asset_found" | "unchanged" | "error" | "skipped";
 
 export type LearningObservation = {
   checked_at: string;
