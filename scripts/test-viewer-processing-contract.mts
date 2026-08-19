@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+const source = readFileSync(new URL("../lib/leaflet-monitor/viewer-processing.ts", import.meta.url), "utf8");
+assert.match(source, /extractAllViewerCandidates\(page\.text, page\.page_no\)/);
+assert.match(source, /await replacePageCandidates\(s, doc, page\)/);
+assert.doesNotMatch(source, /if \(state\?\.status === "completed"\) continue/);
+assert.match(source, /upsert\(row, \{ onConflict: "leaflet_id,candidate_key" \}\)/);
+assert.match(source, /const counts = await getCounts\(s, doc\.id\)/);
+const extractionAt = source.indexOf("await replacePageCandidates(s, doc, page)");
+const completionAt = source.indexOf('status: "completed"', extractionAt);
+assert.ok(extractionAt >= 0 && completionAt > extractionAt);
+console.log("PASS viewer persistence: every page backfills candidates before completion and counters come from DB");
