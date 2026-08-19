@@ -8,7 +8,7 @@ export async function claimLeafletPage(
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from("leaflet_page_processing")
-    .update({ status: "claimed", updated_at: now })
+    .update({ status: "processing", updated_at: now })
     .eq("leaflet_id", leafletId)
     .eq("page_no", pageNo)
     .in("status", allowedStatuses)
@@ -33,6 +33,6 @@ export async function failLeafletPageClaim(
     })
     .eq("leaflet_id", leafletId)
     .eq("page_no", pageNo)
-    .eq("status", "claimed");
+    .eq("status", "processing");
   if (updateError) throw new Error(`page claim cleanup: ${updateError.message}`);
 }
