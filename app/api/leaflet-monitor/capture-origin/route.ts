@@ -46,7 +46,7 @@ function todayPrague() {
   }).format(new Date());
 }
 
-export async function POST(req: Request) {
+async function capture(req: Request) {
   const gate = await requireOperatorApi();
   if (!gate.ok) return gate.response;
 
@@ -130,3 +130,6 @@ export async function POST(req: Request) {
     }, { status: 502 });
   }
 }
+
+export const GET = capture;
+export const POST = capture;
