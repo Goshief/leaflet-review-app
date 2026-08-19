@@ -8,6 +8,7 @@ on:
     paths:
       - "lib/leaflet-review/**"
       - "scripts/test-page-finalization.mts"
+      - "scripts/test-page-claim.mts"
       - "tsconfig.json"
       - ".github/workflows/leaflet-pipeline-fixes.yml"
 
@@ -24,5 +25,7 @@ jobs:
       - run: npm ci
       - name: Strict page finalization regression
         run: node --experimental-strip-types scripts/test-page-finalization.mts
+      - name: Exactly-once page claim regression
+        run: node --experimental-strip-types scripts/test-page-claim.mts
       - name: TypeScript compile check
         run: npx tsc --noEmit
