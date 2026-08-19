@@ -13,6 +13,7 @@ function fakeSupabase(rows: Row[]) {
         update(next: Partial<Row>) { patch = next; return builder; },
         eq(field: keyof Row, value: unknown) { predicates.push((row) => row[field] === value); return builder; },
         in(field: keyof Row, values: unknown[]) { predicates.push((row) => values.includes(row[field])); return builder; },
+        lt(field: keyof Row, value: string) { predicates.push((row) => String(row[field] ?? "") < value); return builder; },
         async select() {
           const matched = rows.filter((row) => predicates.every((predicate) => predicate(row)));
           for (const row of matched) Object.assign(row, patch);
@@ -30,7 +31,7 @@ function fakeSupabase(rows: Row[]) {
 }
 
 {
-  const rows: Row[] = [{ leaflet_id: "leaflet-1", page_no: 3, status: "pending" }];
+  const rows: Row[] = [{ leaflet_id: "leaflet-1", page_no: 3, status: "pending", updated_at: new Date(0).toISOString() }];
   const s = fakeSupabase(rows);
   const [first, second] = await Promise.all([
     claimLeafletPage(s, "leaflet-1", 3),
@@ -41,10 +42,24 @@ function fakeSupabase(rows: Row[]) {
 }
 
 {
-  const rows: Row[] = [{ leaflet_id: "leaflet-1", page_no: 3, status: "completed" }];
+  const rows: Row[] = [{ leaflet_id: "leaflet-1", page_no: 3, status: "completed", updated_at: new Date(0).toISOString() }];
   const s = fakeSupabase(rows);
   assert.equal(await claimLeafletPage(s, "leaflet-1", 3, false), false, "normal resume must not reclaim completed page");
   assert.equal(await claimLeafletPage(s, "leaflet-1", 3, true), true, "force reread may explicitly reclaim completed page");
+}
+
+{
+  const rows: Row[] = [{ leaflet_id: "leaflet-1", page_no: 3, status: "processing", updated_at: new Date(Date.now() - 60_000).toISOString() }];
+  const s = fakeSupabase(rows);
+  assert.equal(await claimLeafletPage(s, "leaflet-1", 3, false, 10 * 60_000), false, "fresh processing page must not be stolen");
+  assert.equal(rows[0].status, "processing");
+}
+
+{
+  const rows: Row[] = [{ leaflet_id: "leaflet-1", page_no: 3, status: "processing", updated_at: new Date(Date.now() - 20 * 60_000).toISOString() }];
+  const s = fakeSupabase(rows);
+  assert.equal(await claimLeafletPage(s, "leaflet-1", 3, false, 10 * 60_000), true, "stale processing page must be reclaimable after a crash");
+  assert.equal(rows[0].status, "processing");
 }
 
 {
@@ -55,4 +70,4 @@ function fakeSupabase(rows: Row[]) {
   assert.equal(rows[0].processing_error, "boom");
 }
 
-console.log("PASS page claim: one winner, completed pages skipped, failed claim released");
+console.log("PASS page claim: one winner, completed skipped, fresh processing protected, stale processing recovered, failures released");
