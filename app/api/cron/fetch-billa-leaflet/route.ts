@@ -1,7 +1,7 @@
 import { runGenericLeafletConnector } from "@/lib/leaflet-monitor/generic-fetcher";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
   return runGenericLeafletConnector(req, {
@@ -9,5 +9,6 @@ export async function GET(req: Request) {
     sourcePage: "https://www.billa.cz/letaky-billa/velky-letak",
     cronSchedule: "29 7 * * *",
     preferredLabels: [/Velký leták/i, /Stáhnout PDF/i, /aktuální leták/i],
+    autoProcess: true,
   });
 }
