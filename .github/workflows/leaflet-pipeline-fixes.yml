@@ -9,6 +9,7 @@ on:
       - "lib/leaflet-review/**"
       - "scripts/test-page-finalization.mts"
       - "scripts/test-page-claim.mts"
+      - "scripts/test-product-block-isolation.mts"
       - "tsconfig.json"
       - ".github/workflows/leaflet-pipeline-fixes.yml"
 
@@ -27,5 +28,7 @@ jobs:
         run: node --experimental-strip-types scripts/test-page-finalization.mts
       - name: Exactly-once page claim regression
         run: node --experimental-strip-types scripts/test-page-claim.mts
+      - name: Product block isolation regression
+        run: node --experimental-strip-types --experimental-specifier-resolution=node scripts/test-product-block-isolation.mts
       - name: TypeScript compile check
         run: npx tsc --noEmit
