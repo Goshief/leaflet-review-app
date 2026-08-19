@@ -14,8 +14,12 @@ assert.equal(new Set(result.map((row) => row.candidate_key)).size, 15, "every bl
 assert.deepEqual(result.map((row) => row.price_sale), Array.from({ length: 15 }, (_, index) => 21.9 + index));
 assert.ok(result.every((row) => row.page_no === 7), "all candidates must stay isolated on the requested page");
 
+const wholeCrown = extractAllViewerCandidates("Jogurt bílý 9,-", 2);
+assert.equal(wholeCrown.length, 1, "whole-crown leaflet prices such as 9,- must be captured");
+assert.equal(wholeCrown[0]?.price_sale, 9);
+
 const uncertain = extractAllViewerCandidates("Cena za 1 kg 99,90", 3);
 assert.equal(uncertain.length, 1, "uncertain price anchors must not be silently dropped");
 assert.equal(uncertain[0]?.status, "quarantine", "uncertain price anchor must be reviewable in quarantine");
 
-console.log("PASS viewer candidate completeness: all 15 anchors captured; uncertain anchors quarantined, never silently dropped");
+console.log("PASS viewer candidate completeness: all 15 anchors and 9,- prices captured; uncertain anchors quarantined, never silently dropped");
