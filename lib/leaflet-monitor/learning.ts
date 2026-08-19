@@ -20,6 +20,8 @@ export type RetailerLearningState = {
   last_visit_at: string | null;
   last_visit_url: string | null;
   last_downloaded_at: string | null;
+  last_asset_fingerprint?: string | null;
+  last_asset_url?: string | null;
   next_check_at: string | null;
   updated_at: string;
 };
@@ -71,6 +73,8 @@ export function emptyLearningState(retailer: RetailerId): RetailerLearningState 
     last_visit_at: null,
     last_visit_url: null,
     last_downloaded_at: null,
+    last_asset_fingerprint: null,
+    last_asset_url: null,
     next_check_at: nextPreferredDate(now, DEFAULT_EXPLORATION_DAYS).toISOString(),
     updated_at: now.toISOString(),
   };
