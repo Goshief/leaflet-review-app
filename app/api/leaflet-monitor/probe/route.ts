@@ -24,7 +24,7 @@ async function probe(url: string) {
       signal: controller.signal,
     });
     return {
-      ok: response.ok,
+      reachable: response.ok,
       status: response.status,
       status_text: response.statusText,
       final_url: response.url,
@@ -48,12 +48,12 @@ export async function GET(req: Request) {
   try {
     const result = await probe(retailer.fetch_url);
     return NextResponse.json({
-      ok: result.ok,
+      ok: result.reachable,
       retailer: retailer.id,
       source_url: retailer.source_url,
       fetch_url: retailer.fetch_url,
       ...result,
-    }, { status: result.ok ? 200 : 502 });
+    }, { status: result.reachable ? 200 : 502 });
   } catch (error) {
     return NextResponse.json({
       ok: false,
