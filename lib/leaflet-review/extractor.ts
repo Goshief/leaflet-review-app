@@ -2,7 +2,7 @@ import type { OcrWord } from "@/lib/ocr/types";
 import { clusterIntoLines, unionWordsBBox } from "@/lib/ocr/price-anchors";
 import { parsePriceText } from "@/lib/ocr/price-parse";
 
-export const EXTRACTOR_VERSION = "leaflet-layout-v4";
+export const EXTRACTOR_VERSION = "leaflet-layout-v5";
 
 export type ExtractedCandidate = {
   candidate_key: string;
@@ -46,9 +46,9 @@ const PACK_RE = /\b(\d+(?:[.,]\d+)?)\s*(g|kg|ml|l|ks|kus|m)\b/i;
 const UNIT_PRICE_PREFIX = /(?:1\s*kg|100\s*g|1\s*l|100\s*ml|1\s*m|1\s*ks)\s*=/i;
 const GENERIC = /^(?:naše cena|naše|cena|běžná cena|původní cena|cena za|cena při koupi|při koupi|při koupi balení|při koupi od \d+ ks|s klubem|bez klubu|s kartou|bez karty|více druhů|regionální|super pátek|pátek|více víkendových slev uvnitř|slev uvnitř|to dobré začíná u nás|na víkend už|ve čtvrtek|připravte se|do vyprodání zásob|v katalogu|akční nabídka|cena za 1 ks|cena za 1 kg)$/i;
 const PROMO_ONLY = /^(?:-?\d+\s*%|od \d+\.\s*\d+\. do \d+\.\s*\d+\.|\d+\.\s*\d+\.|\d+\s*(?:ks|bal\.)|cena za \d+\s*(?:g|kg|ml|l|ks))$/i;
-const DATE_TEXT = /(?:nabídka platí|platí od|\bod\s+\w*\s*\d{1,2}\.\s*\d{1,2}\.\s+do|\d{1,2}\.\s*\d{1,2}\.\s*[-–—]\s*\d{1,2}\.\s*\d{1,2}\.)/i;
+const DATE_TEXT = /(?:nabídka\s+platí|platí\s+od|\b(?:od|do)\s+(?:(?:pondělí|pondelí|úterý|utery|středy|stredy|čtvrtka|ctvrtka|čtvrtku|ctvrtku|pátku|patku|soboty|neděle|nedele)\s+)?\d{1,2}\.\s*\d{1,2}\.|\d{1,2}\.\s*\d{1,2}\.?\s*[-–—]\s*\d{1,2}\.\s*\d{1,2}\.|\b20\d{2}\b.*\b(?:od|do)\b)/i;
 const MONEY_LIKE = /\b\d{1,3}[,.]\d{2}\b/;
-const BAD_NAME_FRAGMENT = /\b(?:běžná cena|původní cena|s klubem|bez klubu|s kartou|bez karty|při koupi|cena za|sleva|nabídka platí|super pátek|více víkendových|do vyprodání|od \d+\.\s*\d+\.|do \d+\.\s*\d+\.)\b/i;
+const BAD_NAME_FRAGMENT = /\b(?:běžná cena|původní cena|s klubem|bez klubu|s kartou|bez karty|při koupi|cena za|sleva|nabídka platí|super pátek|více víkendových|do vyprodání|od \d+\.\s*\d+\.|do \d+\.\s*\d+\.|www\.)\b/i;
 
 function center(w: OcrWord) { return { x: w.x + w.w / 2, y: w.y + w.h / 2 }; }
 function box(words: OcrWord[]) { const b = unionWordsBBox(words, 3); return b ? { x: b.x0, y: b.y0, width: b.x1 - b.x0, height: b.y1 - b.y0 } : null; }
@@ -58,8 +58,6 @@ function evidence(raw: string | null, bbox: unknown) { return raw ? { raw_text: 
 function strictPrice(raw: string): number | null {
   const s = raw.trim().replace(/\s+/g," ");
   if (!s || /%/.test(s) || /\b(?:kg|g|ml|l|ks|m)\b/i.test(s)) return null;
-  // A main CZ price must be visually printed as a decimal price (e.g. 49,90 / 49,-).
-  // Deliberately reject embedded spaces such as "250 7,56"; that is pack text + unit price, not 2507.56 Kč.
   const m = s.match(/^(?:Kč\s*)?(\d{1,3}[,.]\d{2}|\d{1,3},-)(?:\s*Kč)?\/?$/i);
   if (!m) return null;
   const n = parsePriceText(m[1]!);
@@ -85,6 +83,7 @@ function isNameText(s: string) {
   const t=s.trim();
   if(t.length<3||t.length>80||GENERIC.test(t)||PROMO_ONLY.test(t)||DATE_TEXT.test(t)||UNIT_PRICE_PREFIX.test(t)) return false;
   if(/^[-–—+\d\s.,%/=]+$/.test(t)) return false;
+  if(/^(?:g|kg|ml|l|ks|m)\b/i.test(t)) return false;
   if(/\b(?:kč|kc)\b/i.test(t)||BAD_NAME_FRAGMENT.test(t)) return false;
   return /[A-Za-zÁ-ž]{3}/.test(t);
 }
@@ -110,7 +109,7 @@ function findUnitPrice(lines: Line[]) {
 }
 
 function itemValidity(text:string, year:number){
-  const m=text.match(/\bod\s+(\d{1,2})\.\s*(\d{1,2})\.?\s+do\s+(\d{1,2})\.\s*(\d{1,2})\.?/i);if(!m)return{from:null,to:null};
+  const m=text.match(/\bod\s+(?:\p{L}+\s+)?(\d{1,2})\.\s*(\d{1,2})\.?\s+do\s+(?:\p{L}+\s+)?(\d{1,2})\.\s*(\d{1,2})\.?/iu);if(!m)return{from:null,to:null};
   const p=(n:number)=>String(n).padStart(2,"0");return{from:`${year}-${p(Number(m[2]))}-${p(Number(m[1]))}`,to:`${year}-${p(Number(m[4]))}-${p(Number(m[3]))}`};
 }
 
@@ -123,7 +122,6 @@ function isSecondaryPriceLine(line:Line|null, raw:string):boolean {
   const t=line.text;
   if(UNIT_PRICE_PREFIX.test(t)) return true;
   if(/\b(?:běžná cena|původní cena|bez klubu|s klubem|bez karty|s kartou|cena za 100|cena za 1\s*(?:kg|l|m|ks))\b/i.test(t)) return true;
-  // If the line contains several distinct decimal prices, it is an explanatory price line, not a safe main-price anchor.
   const prices=[...t.matchAll(/\b\d{1,3}[,.]\d{2}\b/g)].map(m=>m[0]);
   return prices.length > 1 && !prices.includes(raw.replace(/\/$/,""));
 }
@@ -143,23 +141,29 @@ function assignWords(words: OcrWord[], anchors: Anchor[]) {
   return groups;
 }
 
-function chooseNameLines(lines:Line[], anchor:Anchor):Line[] {
-  const candidates=lines
-    .map(l=>({line:l,clean:cleanNameText(l.text)}))
+function lineXDistance(line:Line, anchor:Anchor):number {
+  const b=line.bbox;
+  if(!b)return 999;
+  if(anchor.cx>=b.x0-8&&anchor.cx<=b.x1+8)return 0;
+  return Math.min(Math.abs(anchor.cx-b.x0),Math.abs(anchor.cx-b.x1));
+}
+
+function chooseNameLines(lines:Line[], anchor:Anchor):{selected:Line[];ambiguous:boolean;candidates:string[]} {
+  const ranked=lines
+    .filter(l=>!l.words.includes(anchor.word))
+    .map(l=>({line:l,clean:cleanNameText(l.text),dy:Math.abs(l.y-anchor.cy),dx:lineXDistance(l,anchor)}))
     .filter(x=>isNameText(x.clean))
-    .filter(x=>Math.abs(x.line.y-anchor.cy)<=68)
-    .sort((a,b)=>{
-      const da=Math.abs(a.line.y-anchor.cy); const db=Math.abs(b.line.y-anchor.cy);
-      if(Math.abs(da-db)>4)return da-db;
-      return b.line.height-a.line.height;
-    });
-  if(!candidates.length)return[];
-  const first=candidates[0]!;
+    .filter(x=>x.dy<=68&&x.dx<=58)
+    .map(x=>({...x,score:x.dy+x.dx*0.65-Math.min(x.line.height,24)*0.2}))
+    .sort((a,b)=>a.score-b.score);
+  if(!ranked.length)return{selected:[],ambiguous:false,candidates:[]};
+  const first=ranked[0]!;
   const selected=[first.line];
-  // A second adjacent textual line is allowed only when it is spatially close; this supports names split over two lines.
-  const second=candidates.slice(1).find(x=>Math.abs(x.line.y-first.line.y)<=24 && Math.abs(x.line.y-anchor.cy)<=68);
+  const second=ranked.slice(1).find(x=>Math.abs(x.line.y-first.line.y)<=24&&x.dx<=58);
   if(second)selected.push(second.line);
-  return selected;
+  const selectedSet=new Set(selected);
+  const competing=ranked.filter(x=>!selectedSet.has(x.line)&&Math.abs(x.line.y-first.line.y)>26&&x.score<=first.score+22);
+  return{selected,ambiguous:competing.length>0,candidates:ranked.map(x=>x.clean)};
 }
 
 export function extractLeafletCandidates(words: OcrWord[], meta: Meta): ExtractedCandidate[] {
@@ -180,20 +184,21 @@ export function extractLeafletCandidates(words: OcrWord[], meta: Meta): Extracte
   dedup.forEach((a,index)=>{
     const group=groups[index]||[];if(!group.length)return;
     const lines=lineObjects(group,medianH);
-    const selected=chooseNameLines(lines,a);
-    const cleanedNames=selected.map(l=>cleanNameText(l.text)).filter(isNameText);
+    const nameChoice=chooseNameLines(lines,a);
+    const cleanedNames=nameChoice.selected.map(l=>cleanNameText(l.text)).filter(isNameText);
     let productName=cleanedNames.join(" ").replace(/\s+/g," ").trim()||null;
     if(productName&&productName.length>100)productName=null;
-    const nameBox=selected.length?box(selected.flatMap(l=>l.words)):null;
+    const nameBox=nameChoice.selected.length?box(nameChoice.selected.flatMap(l=>l.words)):null;
     const standard=findExplicitPrice(lines,/běžná\s*cena|původní\s*cena/i);
-    const loyalty=findExplicitPrice(lines,/s\s*klubem|s\s*kartou|klubová\s*cena/i);
+    const loyalty=findExplicitPrice(lines,/klubová\s*cena/i);
     const without=findExplicitPrice(lines,/bez\s*klubu|bez\s*karty/i);
     const unit=findUnitPrice(lines);
     const source=lines.slice().sort((x,y)=>y.y-x.y).map(l=>l.text).join(" | ");
     const pack=source.match(PACK_RE);const qty=source.match(/při\s+koupi(?:\s+od)?\s+(\d+)\s*ks/i);const promo=source.match(/(při\s+koupi[^|]{0,80}|s\s+Klubem[^|]{0,70}|bez\s+Klubu[^|]{0,70})/i);const iv=itemValidity(source,year);
-    const ambiguousName=!productName || MONEY_LIKE.test(productName) || BAD_NAME_FRAGMENT.test(productName);
+    const loyaltyRequired=/\bs\s+klubem\b|\bs\s+kartou\b/i.test(source)?true:null;
+    const ambiguousName=!productName||nameChoice.ambiguous||MONEY_LIKE.test(productName)||BAD_NAME_FRAGMENT.test(productName)||DATE_TEXT.test(productName);
     const hasCore=!ambiguousName&&a.value!=null;
-    out.push({candidate_key:`p${meta.pageNo}-v4-${index}-${Math.round(a.cx)}-${Math.round(a.cy)}`,page_no:meta.pageNo,source_bbox:box(group),source_text:source||null,product_name:hasCore?productName:null,brand:null,variant:null,pack_qty:pack?1:null,pack_unit:pack?pack[2]!.toLowerCase():null,pack_unit_qty:pack?Number(pack[1]!.replace(",",".")):null,pack_text:pack?pack[0]:null,price_sale:a.value,price_standard:standard?.value??null,price_loyalty:loyalty?.value??null,price_without_loyalty:without?.value??null,price_per_unit:unit?.value??null,price_per_unit_unit:unit?.unit??null,leaflet_valid_from:meta.validFrom,leaflet_valid_to:meta.validTo,item_valid_from:iv.from,item_valid_to:iv.to,loyalty_required:loyalty?true:null,promo_label:null,promo_condition:promo?promo[1]!.trim():null,minimum_quantity:qty?Number(qty[1]):null,field_evidence:{product_name:hasCore?evidence(productName,nameBox):null,price_sale:evidence(a.raw,box([a.word])),price_standard:standard?evidence(standard.raw,standard.bbox):null,price_loyalty:loyalty?evidence(loyalty.raw,loyalty.bbox):null,price_without_loyalty:without?evidence(without.raw,without.bbox):null,price_per_unit:unit?evidence(unit.raw,unit.bbox):null,pack_text:pack?evidence(pack[0],box(group)):null},extraction_payload:{main_price:{raw:a.raw,value:a.value,height:a.word.h,x:a.word.x,y:a.word.y},min_main_height:minMainHeight,lines:lines.map(l=>l.text),name_lines:cleanedNames},extractor_version:EXTRACTOR_VERSION,confidence:hasCore?0.55:0.15,status:hasCore?"unreviewed":"quarantine",review_reason:hasCore?"Kandidát je svázaný pouze s lokálním blokem dominantní ceny. Automatické schválení je zakázané; člověk musí ověřit vazbu proti náhledu stránky.":"Dominantní cena existuje, ale název produktu není v lokálním bloku jednoznačně doložen. Hodnota se nesmí domýšlet."});
+    out.push({candidate_key:`p${meta.pageNo}-v5-${index}-${Math.round(a.cx)}-${Math.round(a.cy)}`,page_no:meta.pageNo,source_bbox:box(group),source_text:source||null,product_name:hasCore?productName:null,brand:null,variant:null,pack_qty:pack?1:null,pack_unit:pack?pack[2]!.toLowerCase():null,pack_unit_qty:pack?Number(pack[1]!.replace(",",".")):null,pack_text:pack?pack[0]:null,price_sale:a.value,price_standard:standard?.value??null,price_loyalty:loyalty?.value??null,price_without_loyalty:without?.value??null,price_per_unit:unit?.value??null,price_per_unit_unit:unit?.unit??null,leaflet_valid_from:meta.validFrom,leaflet_valid_to:meta.validTo,item_valid_from:iv.from,item_valid_to:iv.to,loyalty_required:loyaltyRequired,promo_label:null,promo_condition:promo?promo[1]!.trim():null,minimum_quantity:qty?Number(qty[1]):null,field_evidence:{product_name:hasCore?evidence(productName,nameBox):null,price_sale:evidence(a.raw,box([a.word])),price_standard:standard?evidence(standard.raw,standard.bbox):null,price_loyalty:loyalty?evidence(loyalty.raw,loyalty.bbox):null,price_without_loyalty:without?evidence(without.raw,without.bbox):null,price_per_unit:unit?evidence(unit.raw,unit.bbox):null,pack_text:pack?evidence(pack[0],box(group)):null},extraction_payload:{main_price:{raw:a.raw,value:a.value,height:a.word.h,x:a.word.x,y:a.word.y},min_main_height:minMainHeight,lines:lines.map(l=>l.text),name_lines:cleanedNames,name_candidates:nameChoice.candidates,ambiguous_name:nameChoice.ambiguous},extractor_version:EXTRACTOR_VERSION,confidence:hasCore?0.55:0.1,status:hasCore?"unreviewed":"quarantine",review_reason:hasCore?"Kandidát je svázaný s lokálním cenovým blokem a nemá konkurenční název ve stejné oblasti. Automatické schválení je zakázané.":nameChoice.ambiguous?"V okolí ceny jsou dva nebo více konkurenčních produktových názvů. Položka musí do ruční kontroly; název se nesmí odhadnout.":"Dominantní cena existuje, ale název produktu není v lokálním bloku jednoznačně doložen. Hodnota se nesmí domýšlet."});
   });
   return out;
 }
