@@ -53,11 +53,7 @@ async function probeUrl(url: string) {
 
 function absolute(raw: string, base: string) {
   try {
-    const cleaned = raw
-      .replace(/&amp;/g, "&")
-      .replace(/\\u002F/gi, "/")
-      .replace(/\\\//g, "/")
-      .trim();
+    const cleaned = raw.replace(/&amp;/g, "&").replace(/\\u002F/gi, "/").replace(/\\\//g, "/").trim();
     return new URL(cleaned, base).toString();
   } catch {
     return null;
@@ -77,19 +73,27 @@ function extractUrls(text: string, base: string) {
 }
 
 function interestingSnippets(text: string) {
-  const needles = ["endpoints.leaflets.schwarz", "cms.leaflets.schwarz", "/api/", "publication", "pageImage", "imageUrl", "pages/"];
+  const needles = ["endpoints.leaflets.schwarz", "cms.leaflets.schwarz", "/api/", "publication", "pageImage", "imageUrl", "pages/", "DYNAMIC_FOLDER", "PAGE_COUNT", "PAGES"];
   const out: string[] = [];
   const lower = text.toLowerCase();
   for (const needle of needles) {
     let from = 0;
-    while (out.length < 30) {
+    while (out.length < 40) {
       const at = lower.indexOf(needle.toLowerCase(), from);
       if (at < 0) break;
-      out.push(text.slice(Math.max(0, at - 180), Math.min(text.length, at + 360)).replace(/\s+/g, " "));
+      out.push(text.slice(Math.max(0, at - 220), Math.min(text.length, at + 500)).replace(/\s+/g, " "));
       from = at + needle.length;
     }
   }
-  return uniq(out).slice(0, 30);
+  return uniq(out).slice(0, 40);
+}
+
+function extractFbInit(text: string) {
+  const out: Record<string, string> = {};
+  for (const m of text.matchAll(/FBInit\.([A-Z0-9_]+)\s*=\s*([^;]+);/g)) {
+    out[m[1]] = (m[2] || "").trim().slice(0, 2000);
+  }
+  return out;
 }
 
 async function inspectLidl(viewerUrl: string) {
@@ -108,13 +112,14 @@ async function inspectLidl(viewerUrl: string) {
       }
     } catch {}
   }
-  return { final_url: response.url, bytes: Buffer.byteLength(text), followed: scripts, urls: uniq(expanded).slice(0, 120), snippets: uniq(snippets).slice(0, 30) };
+  return { final_url: response.url, bytes: Buffer.byteLength(text), followed: scripts, viewer_snippets: interestingSnippets(text), urls: uniq(expanded).slice(0, 120), snippets: uniq(snippets).slice(0, 30) };
 }
 
 async function inspectPenny(viewerUrl: string) {
   const { response, text } = await fetchText(viewerUrl);
   const base = response.url || viewerUrl;
   const urls = extractUrls(text, base);
+  const fbInit = extractFbInit(text);
   const buildUrl = absolute("files/html/build.js", base)!;
   let buildText = "";
   try {
@@ -123,20 +128,18 @@ async function inspectPenny(viewerUrl: string) {
   } catch {}
 
   const root = base.endsWith("/") ? base : `${base}/`;
-  const guesses = [
+  const dynamicRaw = fbInit.DYNAMIC_FOLDER?.replace(/^['"]|['"]$/g, "") || "";
+  const dynamicBase = dynamicRaw ? absolute(dynamicRaw, root) : null;
+  const guesses = uniq([
     "files/assets/pages/page0001_l.jpg",
-    "files/assets/pages/page0001.jpg",
-    "files/assets/pages/page0001_l.webp",
-    "files/assets/pages/page0001.webp",
-    "files/assets/pages/page1.jpg",
-    "files/assets/pages/1.jpg",
-    "files/large/1.jpg",
-    "files/thumb/1.jpg",
     "files/assets/cover300.jpg",
-  ].map((p) => new URL(p, root).toString());
+    dynamicBase ? new URL("common/page-html5-substrates/page0001.jpg", dynamicBase.endsWith("/") ? dynamicBase : `${dynamicBase}/`).toString() : null,
+    dynamicBase ? new URL("common/page-html5-substrates/page0001_l.jpg", dynamicBase.endsWith("/") ? dynamicBase : `${dynamicBase}/`).toString() : null,
+    dynamicBase ? new URL("common/page-html5-substrates/1.jpg", dynamicBase.endsWith("/") ? dynamicBase : `${dynamicBase}/`).toString() : null,
+  ].map((p) => p && (p.startsWith("http") ? p : new URL(p, root).toString())));
   const probes = await Promise.all(guesses.map(probeUrl));
 
-  const numericPages = [...text.matchAll(/href=["'](\d+)\/?["']/gi)]
+  const numericPages = [...text.matchAll(/(?:href|content)=["'](?:\.\/)?(\d+)\/?["']/gi)]
     .map((m) => Number(m[1]))
     .filter((n) => Number.isInteger(n) && n > 0 && n < 500);
 
@@ -144,6 +147,8 @@ async function inspectPenny(viewerUrl: string) {
     final_url: response.url,
     bytes: Buffer.byteLength(text),
     page_count_hint: numericPages.length ? Math.max(...numericPages) : null,
+    fb_init: fbInit,
+    viewer_snippets: interestingSnippets(text),
     build_url: buildUrl,
     build_bytes: Buffer.byteLength(buildText),
     build_snippets: interestingSnippets(buildText),
@@ -168,7 +173,7 @@ async function inspectKaufland(viewerUrl: string) {
       }
     } catch {}
   }
-  return { final_url: response.url, bytes: Buffer.byteLength(text), followed: scripts, urls: uniq(expanded).slice(0, 160), snippets: uniq(snippets).slice(0, 30) };
+  return { final_url: response.url, bytes: Buffer.byteLength(text), followed: scripts, viewer_snippets: interestingSnippets(text), urls: uniq(expanded).slice(0, 160), snippets: uniq(snippets).slice(0, 30) };
 }
 
 export async function GET(req: Request) {
