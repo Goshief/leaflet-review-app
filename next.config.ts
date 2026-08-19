@@ -32,22 +32,21 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Prevent Next/Turbopack from inferring a parent workspace root on machines
-  // where multiple lockfiles exist above this app.
   turbopack: {
     root: path.resolve(__dirname),
   },
-  // Ensure output file tracing stays within this app directory.
   outputFileTracingRoot: path.resolve(__dirname),
-  // Server-side native/dynamic packages stay external so their runtime files are kept intact.
-  // pdfjs-dist must stay external because its worker module is loaded dynamically at runtime.
   serverExternalPackages: ["tesseract.js", "pdfjs-dist", "pg"],
-  /**
-   * Vercel (Turbopack) občas při build trace omylem “sebere” celý projekt,
-   * což vede k chybám typu “unexpected file in NFT list”.
-   * .traineddata jsou velké binární soubory pro Tesseract a nemají být součástí
-   * output file tracingu pro serverless/edge funkce.
-   */
+  // pdfjs-dist loads its worker dynamically on Node. Vercel tracing otherwise
+  // omits it from the serverless function and runtime falls back to a missing fake worker.
+  outputFileTracingIncludes: {
+    "/api/leaflet-ai/process": [
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+      "./node_modules/pdfjs-dist/standard_fonts/**/*",
+      "./node_modules/pdfjs-dist/cmaps/**/*",
+    ],
+  },
   outputFileTracingExcludes: {
     "*": ["**/*.traineddata"],
   },
