@@ -2,7 +2,7 @@ import type { OcrWord } from "@/lib/ocr/types";
 import { clusterIntoLines, unionWordsBBox } from "@/lib/ocr/price-anchors";
 import { parsePriceText } from "@/lib/ocr/price-parse";
 
-export const EXTRACTOR_VERSION = "leaflet-layout-v8";
+export const EXTRACTOR_VERSION = "leaflet-layout-v9";
 
 export type ExtractedCandidate = {
   candidate_key: string;
@@ -100,13 +100,29 @@ function buildBounds(anchor:Anchor,anchors:Anchor[],page:BBox):BBox{
   return{x0:left,y0:bottom,x1:right,y1:top};
 }
 
-function segmentProductBlocks(words:OcrWord[],lines:Line[],anchors:Anchor[]):ProductBlock[]{
-  const page=bboxOf(words,0);if(!page)return[];const bounds=anchors.map(a=>buildBounds(a,anchors,page));const owned=anchors.map(()=>[] as Line[]);
-  for(const line of lines){const b=line.bbox;if(!b)continue;const lc={x:(b.x0+b.x1)/2,y:(b.y0+b.y1)/2};let best=-1;let bestScore=Infinity;
-    for(let i=0;i<anchors.length;i++){const a=anchors[i]!;if(line.words.includes(a.word)){best=i;bestScore=-1;break;}if(!inside(lc,bounds[i]!,4))continue;const dx=Math.abs(lc.x-a.cx),dy=Math.abs(lc.y-a.cy);if(dx>78||dy>62)continue;const score=(dx/72)**2+(dy/58)**2;if(score<bestScore){bestScore=score;best=i;}}
-    if(best>=0)owned[best]!.push(line);
+function segmentProductBlocks(words:OcrWord[],anchors:Anchor[],medianH:number):ProductBlock[]{
+  const page=bboxOf(words,0);if(!page)return[];
+  const bounds=anchors.map(a=>buildBounds(a,anchors,page));
+  const ownedWords=anchors.map(()=>[] as OcrWord[]);
+  const anchorOwner=new Map<OcrWord,number>();
+  anchors.forEach((a,i)=>anchorOwner.set(a.word,i));
+  for(const word of words){
+    const forced=anchorOwner.get(word);
+    if(forced!=null){ownedWords[forced]!.push(word);continue;}
+    const wc=center(word);let best=-1;let bestScore=Infinity;
+    for(let i=0;i<anchors.length;i++){
+      const a=anchors[i]!;if(!inside(wc,bounds[i]!,2))continue;
+      const dx=Math.abs(wc.x-a.cx),dy=Math.abs(wc.y-a.cy);if(dx>80||dy>64)continue;
+      const score=(dx/72)**2+(dy/58)**2;if(score<bestScore){bestScore=score;best=i;}
+    }
+    if(best>=0)ownedWords[best]!.push(word);
   }
-  return anchors.map((anchor,blockIndex)=>{const local=(owned[blockIndex]??[]).slice().sort((a,b)=>Math.abs(a.y-anchor.cy)-Math.abs(b.y-anchor.cy));const blockLines=local.slice(0,10);const blockWords=[...new Set(blockLines.flatMap(l=>l.words))];if(!blockWords.includes(anchor.word))blockWords.push(anchor.word);return{anchor,words:blockWords,lines:blockLines,bounds:bounds[blockIndex]!,blockIndex};}).filter(b=>b.words.length);
+  return anchors.map((anchor,blockIndex)=>{
+    const local=lineObjects(ownedWords[blockIndex]??[],medianH).sort((a,b)=>Math.abs(a.y-anchor.cy)-Math.abs(b.y-anchor.cy));
+    const blockLines=local.slice(0,10);const blockWords=[...new Set(blockLines.flatMap(l=>l.words))];
+    if(!blockWords.includes(anchor.word))blockWords.push(anchor.word);
+    return{anchor,words:blockWords,lines:blockLines,bounds:bounds[blockIndex]!,blockIndex};
+  }).filter(b=>b.words.length);
 }
 
 function lineXDistance(line:Line,anchor:Anchor){const b=line.bbox;if(!b)return 999;if(anchor.cx>=b.x0-8&&anchor.cx<=b.x1+8)return 0;return Math.min(Math.abs(anchor.cx-b.x0),Math.abs(anchor.cx-b.x1));}
@@ -126,10 +142,10 @@ function itemValidity(text:string,year:number){const m=text.match(/\bod\s+(?:\p{
 export function extractLeafletCandidates(words:OcrWord[],meta:Meta):ExtractedCandidate[]{
   if(!words.length)return[];const heights=words.map(w=>w.h).filter(h=>Number.isFinite(h)&&h>0).sort((a,b)=>a-b);const medianH=heights[Math.floor(heights.length/2)]||8;const minMainHeight=Math.max(18,medianH*2.05);const globalLines=lineObjects(words,medianH);
   const anchors:Anchor[]=[];for(const w of words){const value=strictPrice(w.text);if(value==null||w.h<minMainHeight)continue;const containing=globalLineForWord(globalLines,w);if(isSecondaryPriceLine(containing,w.text.trim()))continue;const p=center(w);anchors.push({word:w,value,raw:w.text.trim(),cx:p.x,cy:p.y});}
-  const dedup=anchors.filter((a,i,all)=>!all.some((b,j)=>j<i&&Math.abs(a.cx-b.cx)<10&&Math.abs(a.cy-b.cy)<10&&Math.abs(a.value-b.value)<0.001));const blocks=segmentProductBlocks(words,globalLines,dedup);const year=Number((meta.validTo||meta.validFrom||String(new Date().getFullYear())).slice(0,4))||new Date().getFullYear();const out:ExtractedCandidate[]=[];
+  const dedup=anchors.filter((a,i,all)=>!all.some((b,j)=>j<i&&Math.abs(a.cx-b.cx)<10&&Math.abs(a.cy-b.cy)<10&&Math.abs(a.value-b.value)<0.001));const blocks=segmentProductBlocks(words,dedup,medianH);const year=Number((meta.validTo||meta.validFrom||String(new Date().getFullYear())).slice(0,4))||new Date().getFullYear();const out:ExtractedCandidate[]=[];
   for(const block of blocks){const a=block.anchor;const lines=block.lines;const nameChoice=chooseNameLines(lines,a);const cleanedNames=nameChoice.selected.map(l=>cleanNameText(l.text)).filter(isNameText);let productName=cleanedNames.join(" ").replace(/\s+/g," ").trim()||null;if(productName&&productName.length>100)productName=null;const nameBox=nameChoice.selected.length?publicBox(nameChoice.selected.flatMap(l=>l.words)):null;
     const standard=findExplicitPrice(lines,/běžná\s*cena|původní\s*cena/i);const loyalty=findExplicitPrice(lines,/klubová\s*cena|s\s+klubem|s\s+kartou/i);const without=findExplicitPrice(lines,/bez\s*klubu|bez\s*karty/i);const unit=findUnitPrice(lines);const source=lines.slice().sort((x,y)=>y.y-x.y).map(l=>l.text).join(" | ");const pack=source.match(PACK_RE);const qty=source.match(/při\s+koupi(?:\s+od)?\s+(\d+)\s*ks/i);const promo=source.match(/(při\s+koupi[^|]{0,80}|s\s+Klubem[^|]{0,70}|bez\s+Klubu[^|]{0,70})/i);const iv=itemValidity(source,year);const loyaltyRequired=/\bs\s+klubem\b|\bs\s+kartou\b/i.test(source)?true:null;
     const ambiguousName=!productName||nameChoice.ambiguous||MONEY_LIKE.test(productName)||BAD_NAME_FRAGMENT.test(productName)||DATE_TEXT.test(productName);const hasCore=!ambiguousName&&a.value!=null;const b=block.bounds;
-    out.push({candidate_key:`p${meta.pageNo}-v8-${block.blockIndex}-${Math.round(a.cx)}-${Math.round(a.cy)}`,page_no:meta.pageNo,source_bbox:publicBox(block.words),source_text:source||null,product_name:hasCore?productName:null,brand:null,variant:null,pack_qty:pack?1:null,pack_unit:pack?pack[2]!.toLowerCase():null,pack_unit_qty:pack?Number(pack[1]!.replace(",",".")):null,pack_text:pack?pack[0]:null,price_sale:a.value,price_standard:standard?.value??null,price_loyalty:loyalty?.value??null,price_without_loyalty:without?.value??null,price_per_unit:unit?.value??null,price_per_unit_unit:unit?.unit??null,leaflet_valid_from:meta.validFrom,leaflet_valid_to:meta.validTo,item_valid_from:iv.from,item_valid_to:iv.to,loyalty_required:loyaltyRequired,promo_label:null,promo_condition:promo?promo[1]!.trim():null,minimum_quantity:qty?Number(qty[1]):null,field_evidence:{product_name:hasCore?evidence(productName,nameBox):null,price_sale:evidence(a.raw,publicBox([a.word])),price_standard:standard?evidence(standard.raw,standard.bbox):null,price_loyalty:loyalty?evidence(loyalty.raw,loyalty.bbox):null,price_without_loyalty:without?evidence(without.raw,without.bbox):null,price_per_unit:unit?evidence(unit.raw,unit.bbox):null,pack_text:pack?evidence(pack[0],publicBox(block.words)):null},extraction_payload:{segmentation:"local-line-segments-v3",block_bounds:b,owned_line_count:lines.length,main_price:{raw:a.raw,value:a.value,height:a.word.h,x:a.word.x,y:a.word.y},min_main_height:minMainHeight,lines:lines.map(l=>l.text),name_lines:cleanedNames,name_candidates:nameChoice.candidates,ambiguous_name:nameChoice.ambiguous},extractor_version:EXTRACTOR_VERSION,confidence:hasCore?0.64:0.1,status:hasCore?"unreviewed":"quarantine",review_reason:hasCore?"Produktový blok vznikl z lokálních textových segmentů a každý segment patří právě jednomu bloku. Automatické schválení je zakázané.":nameChoice.ambiguous?"V izolovaném produktovém bloku zůstává více konkurenčních názvů. Položka musí do ruční kontroly.":"V izolovaném produktovém bloku není název produktu jednoznačně doložen. Hodnota se nesmí domýšlet."});}
+    out.push({candidate_key:`p${meta.pageNo}-v9-${block.blockIndex}-${Math.round(a.cx)}-${Math.round(a.cy)}`,page_no:meta.pageNo,source_bbox:publicBox(block.words),source_text:source||null,product_name:hasCore?productName:null,brand:null,variant:null,pack_qty:pack?1:null,pack_unit:pack?pack[2]!.toLowerCase():null,pack_unit_qty:pack?Number(pack[1]!.replace(",",".")):null,pack_text:pack?pack[0]:null,price_sale:a.value,price_standard:standard?.value??null,price_loyalty:loyalty?.value??null,price_without_loyalty:without?.value??null,price_per_unit:unit?.value??null,price_per_unit_unit:unit?.unit??null,leaflet_valid_from:meta.validFrom,leaflet_valid_to:meta.validTo,item_valid_from:iv.from,item_valid_to:iv.to,loyalty_required:loyaltyRequired,promo_label:null,promo_condition:promo?promo[1]!.trim():null,minimum_quantity:qty?Number(qty[1]):null,field_evidence:{product_name:hasCore?evidence(productName,nameBox):null,price_sale:evidence(a.raw,publicBox([a.word])),price_standard:standard?evidence(standard.raw,standard.bbox):null,price_loyalty:loyalty?evidence(loyalty.raw,loyalty.bbox):null,price_without_loyalty:without?evidence(without.raw,without.bbox):null,price_per_unit:unit?evidence(unit.raw,unit.bbox):null,pack_text:pack?evidence(pack[0],publicBox(block.words)):null},extraction_payload:{segmentation:"word-owner-v1",block_bounds:b,owned_word_count:block.words.length,owned_line_count:lines.length,main_price:{raw:a.raw,value:a.value,height:a.word.h,x:a.word.x,y:a.word.y},min_main_height:minMainHeight,lines:lines.map(l=>l.text),name_lines:cleanedNames,name_candidates:nameChoice.candidates,ambiguous_name:nameChoice.ambiguous},extractor_version:EXTRACTOR_VERSION,confidence:hasCore?0.64:0.1,status:hasCore?"unreviewed":"quarantine",review_reason:hasCore?"Produktový blok vznikl z OCR slov s jediným vlastníkem; sousední produkt nesmí sdílet stejné slovo. Automatické schválení je zakázané.":nameChoice.ambiguous?"V izolovaném produktovém bloku zůstává více konkurenčních názvů. Položka musí do ruční kontroly.":"V izolovaném produktovém bloku není název produktu jednoznačně doložen. Hodnota se nesmí domýšlet."});}
   return out;
 }
