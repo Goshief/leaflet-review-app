@@ -1,1 +1,2 @@
-Trigger deployment for verified BILLA segmentation v8.
+Trigger deployment for BILLA segmentation preview verification.
+2026-08-19T08:59Z
