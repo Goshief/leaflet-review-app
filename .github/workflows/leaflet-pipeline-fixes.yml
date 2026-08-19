@@ -8,10 +8,7 @@ on:
     paths:
       - "app/api/leaflet-monitor/pdf/route.ts"
       - "lib/leaflet-review/**"
-      - "lib/leaflet-monitor/connector-with-origin.ts"
-      - "lib/leaflet-monitor/discovery.ts"
-      - "lib/leaflet-monitor/pdf-validation.ts"
-      - "lib/leaflet-monitor/retailers.ts"
+      - "lib/leaflet-monitor/**"
       - "lib/security/headers.ts"
       - "next.config.ts"
       - "scripts/test-page-finalization.mts"
@@ -20,6 +17,7 @@ on:
       - "scripts/test-pdf-validation.mts"
       - "scripts/test-retailer-config.mts"
       - "scripts/test-source-validation.mts"
+      - "scripts/test-viewer-all-candidates.mts"
       - "tsconfig.json"
       - ".github/workflows/leaflet-pipeline-fixes.yml"
 
@@ -42,6 +40,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-pdf-validation.mts
       - name: PDF framing regression
         run: node --experimental-strip-types scripts/test-pdf-frame-headers.mts
+      - name: Viewer all-candidates regression
+        run: node --experimental-strip-types scripts/test-viewer-all-candidates.mts
       - name: Strict page finalization regression
         run: node --experimental-strip-types scripts/test-page-finalization.mts
       - name: Exactly-once page claim regression
