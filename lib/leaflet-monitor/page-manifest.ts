@@ -175,29 +175,50 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item
 }
 
 function pennyPagePayload(text: string, identifier: string, pageNo: number) {
-  const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const header = new RegExp(`^.*?${escaped}\\s+${pageNo}\\s+`, "i");
-  return text.replace(header, "").trim();
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const first = normalized.indexOf(identifier);
+  const second = first >= 0 ? normalized.indexOf(identifier, first + identifier.length) : -1;
+  if (second < 0) return normalized;
+  const tail = normalized.slice(second + identifier.length).trim();
+  return tail.replace(new RegExp(`^${pageNo}\\s+`), "").trim();
+}
+
+function allIndexes(haystack: string, needle: string) {
+  const out: number[] = [];
+  let from = 0;
+  while (needle && from < haystack.length) {
+    const at = haystack.indexOf(needle, from);
+    if (at < 0) break;
+    out.push(at);
+    from = at + Math.max(1, needle.length);
+  }
+  return out;
 }
 
 function isolatePennyFirstPage(rootText: string, page2Text: string, identifier: string) {
   const root = rootText.replace(/\s+/g, " ").trim();
   const page2Payload = pennyPagePayload(page2Text, identifier, 2);
   let cutAt = -1;
-  for (const size of [180, 140, 100, 70, 50]) {
+
+  for (const size of [120, 90, 70, 50, 35]) {
     if (page2Payload.length < size) continue;
     const anchor = page2Payload.slice(0, size);
-    const at = root.indexOf(anchor);
-    if (at > 0) {
-      cutAt = at;
+    const hits = allIndexes(root, anchor);
+    if (!hits.length) continue;
+    const usable = hits.filter((at) => at > 500);
+    if (usable.length) {
+      cutAt = usable[0];
       break;
     }
   }
+
   if (cutAt < 0) {
     throw new Error("Penny strana 1: nepodařilo se najít bezpečnou hranici začátku strany 2.");
   }
+
   const isolated = root.slice(0, cutAt).trim();
-  const navPrefix = new RegExp(`^${identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(?:2\\s+3\\s+4[\\d\\s]*?)?${identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*`, "i");
+  const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const navPrefix = new RegExp(`^${escaped}\\s+(?:\\d+\\s+)+${escaped}\\s*`, "i");
   return isolated.replace(navPrefix, "").trim();
 }
 
