@@ -61,6 +61,24 @@ function rememberAsset(state: RetailerLearningState, fingerprint: string, assetU
   };
 }
 
+function assetMarkerPath(retailer: RetailerId, fingerprint: string) {
+  const digest = createHash("sha256").update(fingerprint).digest("hex");
+  return `_assets/${retailer}/${digest}.json`;
+}
+
+async function claimAssetMarker(s: any, retailer: RetailerId, fingerprint: string, assetUrl: string, checkedAt: string) {
+  const path = assetMarkerPath(retailer, fingerprint);
+  const payload = JSON.stringify({ retailer, fingerprint, asset_url: assetUrl, first_seen_at: checkedAt });
+  const { error } = await s.storage.from(BUCKET).upload(path, new Blob([payload], { type: "application/json" }), {
+    contentType: "application/json",
+    upsert: false,
+    cacheControl: "31536000",
+  });
+  if (!error) return { isNew: true, path };
+  if (/already exists|duplicate|resource exists/i.test(error.message || "")) return { isNew: false, path };
+  throw new Error(`Asset registry: ${error.message}`);
+}
+
 async function fetchWithTimeout(url: string, timeoutMs = 30000) {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -168,6 +186,8 @@ export async function runGenericLeafletConnector(req: Request, config: Config) {
 
   const checkedAt = new Date().toISOString();
   const marker = `_checks/${config.retailer}-${todayPrague()}.json`;
+  let claimedMarkerPath: string | null = null;
+  let claimedMarkerIsNew = false;
   if (!manual) {
     const { data: existingMarker } = await s.storage.from(BUCKET).list("_checks", { search: `${config.retailer}-${todayPrague()}.json`, limit: 1 });
     if ((existingMarker || []).some((x: any) => x.name === `${config.retailer}-${todayPrague()}.json`)) return NextResponse.json({ ok: true, status: "already_checked_today", retailer: config.retailer });
@@ -181,8 +201,10 @@ export async function runGenericLeafletConnector(req: Request, config: Config) {
 
     if (!resolved.pdf) {
       const fingerprint = viewerFingerprint(config.retailer, resolved.asset.url);
-      const known = !reprocess && learning?.last_asset_fingerprint === fingerprint;
-      const status = known ? "unchanged" as const : "asset_found" as const;
+      const claim = await claimAssetMarker(s, config.retailer, fingerprint, resolved.asset.url, checkedAt);
+      claimedMarkerPath = claim.path;
+      claimedMarkerIsNew = claim.isNew;
+      const status = !reprocess && !claim.isNew ? "unchanged" as const : "asset_found" as const;
       const payload = {
         checked_at: checkedAt,
         visited_url: config.sourcePage,
@@ -207,10 +229,13 @@ export async function runGenericLeafletConnector(req: Request, config: Config) {
     const bytesLength = pdf.bytes.byteLength;
     const sha256 = createHash("sha256").update(pdf.bytes).digest("hex");
     const fingerprint = `pdf:${sha256}`;
-    if (!reprocess && learning?.last_asset_fingerprint === fingerprint) {
-      const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "unchanged" as const, manual, asset_url: resolved.asset.url, asset_fingerprint: fingerprint, viewer_url: pdf.viewer_url, pdf_url: pdf.url, sha256, storage_path: learning.last_storage_path ?? null };
+    const claim = await claimAssetMarker(s, config.retailer, fingerprint, resolved.asset.url, checkedAt);
+    claimedMarkerPath = claim.path;
+    claimedMarkerIsNew = claim.isNew;
+    if (!reprocess && !claim.isNew) {
+      const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "unchanged" as const, manual, asset_url: resolved.asset.url, asset_fingerprint: fingerprint, viewer_url: pdf.viewer_url, pdf_url: pdf.url, sha256, storage_path: learning?.last_storage_path ?? null };
       await s.storage.from(BUCKET).upload(marker, new Blob([JSON.stringify(payload)], { type: "application/json" }), { contentType: "application/json", upsert: true });
-      const next = rememberAsset(recordObservation(learning, config.retailer, "unchanged", checkedAt, resolved.asset.url), fingerprint, resolved.asset.url, learning.last_storage_path);
+      const next = rememberAsset(recordObservation(learning, config.retailer, "unchanged", checkedAt, resolved.asset.url), fingerprint, resolved.asset.url, learning?.last_storage_path);
       await writeLearning(s, next);
       return NextResponse.json({ ok: true, ...payload, learning: next });
     }
@@ -250,6 +275,9 @@ export async function runGenericLeafletConnector(req: Request, config: Config) {
     await writeLearning(s, next);
     return NextResponse.json({ ok: true, ...payload, learning: next });
   } catch (error) {
+    if (claimedMarkerIsNew && claimedMarkerPath) {
+      try { await s.storage.from(BUCKET).remove([claimedMarkerPath]); } catch {}
+    }
     const message = error instanceof Error ? error.message : String(error);
     const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "error" as const, manual, error: message };
     await s.storage.from(BUCKET).upload(marker, new Blob([JSON.stringify(payload)], { type: "application/json" }), { contentType: "application/json", upsert: true });
