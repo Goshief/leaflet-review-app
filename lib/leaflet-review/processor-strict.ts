@@ -1,6 +1,7 @@
 import { processLeafletPdf as processLeafletPdfLegacy } from "./processor";
 import { analyzePageCompletion } from "./page-state";
 import { claimLeafletPage, failLeafletPageClaim } from "./page-claim";
+import { sanitizeLeafletValidity } from "./validity-policy";
 import { sendLeafletNotification } from "./notify";
 
 async function getDocument(s: any, bucket: string, path: string) {
@@ -97,6 +98,7 @@ export async function processLeafletPdf(args: {
 
   document = await getDocument(s, args.bucket, args.path);
   if (!document) throw new Error("Leaflet document po zpracování neexistuje.");
+  const validity = sanitizeLeafletValidity(document.valid_from, document.valid_to);
   states = await getPageStates(s, String(document.id));
   const completion = analyzePageCompletion(states, pageCount);
   const counts = await getCandidateCounts(s, String(document.id));
@@ -118,6 +120,8 @@ export async function processLeafletPdf(args: {
       processing_status: processingStatus,
       processing_completed_at: null,
       processing_error: processingError.slice(0, 2000),
+      valid_from: validity.valid_from,
+      valid_to: validity.valid_to,
       updated_at: new Date().toISOString(),
       ...counts,
     }).eq("id", document.id);
@@ -128,6 +132,8 @@ export async function processLeafletPdf(args: {
       leaflet: {
         ...(lastResult?.leaflet ?? document),
         ...counts,
+        valid_from: validity.valid_from,
+        valid_to: validity.valid_to,
         processed_pages: completion.completedCount,
         processing_status: processingStatus,
         processing_error: processingError.slice(0, 2000),
@@ -145,6 +151,8 @@ export async function processLeafletPdf(args: {
     processing_status: processingStatus,
     processing_completed_at: completedAt,
     processing_error: null,
+    valid_from: validity.valid_from,
+    valid_to: validity.valid_to,
     updated_at: completedAt,
     ...counts,
   }).eq("id", document.id);
@@ -158,6 +166,8 @@ export async function processLeafletPdf(args: {
     processing_status: processingStatus,
     processing_completed_at: completedAt,
     processing_error: null,
+    valid_from: validity.valid_from,
+    valid_to: validity.valid_to,
   };
   const notification = await queueNotification(s, finalLeaflet, counts);
   const { data: candidates } = await s
