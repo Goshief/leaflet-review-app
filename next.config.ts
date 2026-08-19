@@ -39,8 +39,9 @@ const nextConfig: NextConfig = {
   },
   // Ensure output file tracing stays within this app directory.
   outputFileTracingRoot: path.resolve(__dirname),
-  // `pg` je čistě server-side (transakce v /api/commit) a Turbopack ho nemá bundlovat.
-  serverExternalPackages: ["tesseract.js", "pg"],
+  // Server-side native/dynamic packages stay external so their runtime files are kept intact.
+  // pdfjs-dist must stay external because its worker module is loaded dynamically at runtime.
+  serverExternalPackages: ["tesseract.js", "pdfjs-dist", "pg"],
   /**
    * Vercel (Turbopack) občas při build trace omylem “sebere” celý projekt,
    * což vede k chybám typu “unexpected file in NFT list”.
