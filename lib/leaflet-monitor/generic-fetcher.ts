@@ -8,7 +8,6 @@ import { recordObservation, shouldVisitRetailer, type RetailerId, type RetailerL
 const BUCKET = "leaflet-intake";
 const USER_AGENT = "Mozilla/5.0 (compatible; LeafletReviewApp/1.0; +https://leaflet-review-app.vercel.app)";
 type Config = { retailer: RetailerId; sourcePage: string; cronSchedule: string; preferredLabels: RegExp[]; autoProcess?: boolean };
-
 type PdfHit = { url: string; bytes: Uint8Array; viewer_url: string; asset: LeafletAsset };
 
 function decodeHtml(v: string) {
@@ -30,6 +29,36 @@ function extractPdfUrls(html: string, base: string) {
     if (/pdf|download|stáhnout|stahnout/i.test(label)) add(match[1] || "");
   }
   return [...found];
+}
+
+function canonicalAssetUrl(retailer: RetailerId, rawUrl: string) {
+  try {
+    const url = new URL(rawUrl);
+    url.hash = "";
+    if (retailer === "lidl") {
+      url.pathname = url.pathname.replace(/\/view\/flyer\/page\/\d+\/?$/i, "/view/flyer");
+      url.search = "";
+    } else if (retailer === "kaufland" || retailer === "penny") {
+      url.search = "";
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return rawUrl;
+  }
+}
+
+function viewerFingerprint(retailer: RetailerId, assetUrl: string) {
+  const canonical = canonicalAssetUrl(retailer, assetUrl);
+  return `viewer:${createHash("sha256").update(`${retailer}|${canonical}`).digest("hex")}`;
+}
+
+function rememberAsset(state: RetailerLearningState, fingerprint: string, assetUrl: string, storagePath?: string | null): RetailerLearningState {
+  return {
+    ...state,
+    last_asset_fingerprint: fingerprint,
+    last_asset_url: assetUrl,
+    last_storage_path: storagePath ?? state.last_storage_path ?? null,
+  };
 }
 
 async function fetchWithTimeout(url: string, timeoutMs = 30000) {
@@ -151,20 +180,25 @@ export async function runGenericLeafletConnector(req: Request, config: Config) {
     const resolved = await resolveSelectedAsset(sourceHtml, source.url || config.sourcePage, config.retailer);
 
     if (!resolved.pdf) {
+      const fingerprint = viewerFingerprint(config.retailer, resolved.asset.url);
+      const known = !reprocess && learning?.last_asset_fingerprint === fingerprint;
+      const status = known ? "unchanged" as const : "asset_found" as const;
       const payload = {
         checked_at: checkedAt,
         visited_url: config.sourcePage,
         retailer: config.retailer,
-        status: "asset_found" as const,
+        status,
         manual,
         asset_url: resolved.asset.url,
+        asset_fingerprint: fingerprint,
         asset_label: resolved.asset.label,
         asset_kind: resolved.asset.kind,
         asset_score: resolved.asset.score,
         pdf_resolved: false,
+        storage_path: learning?.last_storage_path ?? null,
       };
       await s.storage.from(BUCKET).upload(marker, new Blob([JSON.stringify(payload)], { type: "application/json" }), { contentType: "application/json", upsert: true });
-      const next = recordObservation(learning, config.retailer, "asset_found", checkedAt, resolved.asset.url);
+      const next = rememberAsset(recordObservation(learning, config.retailer, status, checkedAt, resolved.asset.url), fingerprint, resolved.asset.url);
       await writeLearning(s, next);
       return NextResponse.json({ ok: true, ...payload, learning: next });
     }
@@ -172,15 +206,24 @@ export async function runGenericLeafletConnector(req: Request, config: Config) {
     const pdf = resolved.pdf;
     const bytesLength = pdf.bytes.byteLength;
     const sha256 = createHash("sha256").update(pdf.bytes).digest("hex");
+    const fingerprint = `pdf:${sha256}`;
+    if (!reprocess && learning?.last_asset_fingerprint === fingerprint) {
+      const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "unchanged" as const, manual, asset_url: resolved.asset.url, asset_fingerprint: fingerprint, viewer_url: pdf.viewer_url, pdf_url: pdf.url, sha256, storage_path: learning.last_storage_path ?? null };
+      await s.storage.from(BUCKET).upload(marker, new Blob([JSON.stringify(payload)], { type: "application/json" }), { contentType: "application/json", upsert: true });
+      const next = rememberAsset(recordObservation(learning, config.retailer, "unchanged", checkedAt, resolved.asset.url), fingerprint, resolved.asset.url, learning.last_storage_path);
+      await writeLearning(s, next);
+      return NextResponse.json({ ok: true, ...payload, learning: next });
+    }
+
     const shortSha = sha256.slice(0, 16);
     const { data: existing } = await s.storage.from(BUCKET).list(String(config.retailer), { search: shortSha, limit: 20 });
     const found = (existing || []).find((x: any) => x.name?.includes(shortSha));
     if (found) {
       const storagePath = `${config.retailer}/${found.name}`;
       const processing = await processIfNeeded(s, config, storagePath, pdf.bytes, pdf.url, reprocess);
-      const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "unchanged", manual, reprocess, asset_url: resolved.asset.url, viewer_url: pdf.viewer_url, pdf_url: pdf.url, sha256, storage_path: storagePath, processing };
+      const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "unchanged" as const, manual, reprocess, asset_url: resolved.asset.url, asset_fingerprint: fingerprint, viewer_url: pdf.viewer_url, pdf_url: pdf.url, sha256, storage_path: storagePath, processing };
       await s.storage.from(BUCKET).upload(marker, new Blob([JSON.stringify(payload)], { type: "application/json" }), { contentType: "application/json", upsert: true });
-      const next = recordObservation(learning, config.retailer, "unchanged", checkedAt, resolved.asset.url);
+      const next = rememberAsset(recordObservation(learning, config.retailer, "unchanged", checkedAt, resolved.asset.url), fingerprint, resolved.asset.url, storagePath);
       await writeLearning(s, next);
       return NextResponse.json({ ok: true, ...payload, learning: next });
     }
@@ -191,20 +234,24 @@ export async function runGenericLeafletConnector(req: Request, config: Config) {
     if (uploadError) {
       if (/already exists/i.test(uploadError.message)) {
         const processing = await processIfNeeded(s, config, storagePath, pdf.bytes, pdf.url, reprocess);
-        return NextResponse.json({ ok: true, status: "unchanged", retailer: config.retailer, storage_path: storagePath, processing });
+        const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "unchanged" as const, manual, asset_url: resolved.asset.url, asset_fingerprint: fingerprint, viewer_url: pdf.viewer_url, pdf_url: pdf.url, sha256, storage_path: storagePath, processing };
+        await s.storage.from(BUCKET).upload(marker, new Blob([JSON.stringify(payload)], { type: "application/json" }), { contentType: "application/json", upsert: true });
+        const next = rememberAsset(recordObservation(learning, config.retailer, "unchanged", checkedAt, resolved.asset.url), fingerprint, resolved.asset.url, storagePath);
+        await writeLearning(s, next);
+        return NextResponse.json({ ok: true, ...payload, learning: next });
       }
       throw new Error(`Storage upload: ${uploadError.message}`);
     }
 
     const processing = await processIfNeeded(s, config, storagePath, pdf.bytes, pdf.url, true);
-    const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "downloaded", manual, asset_url: resolved.asset.url, viewer_url: pdf.viewer_url, pdf_url: pdf.url, sha256, bytes: bytesLength, storage_path: storagePath, processing };
+    const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "downloaded" as const, manual, asset_url: resolved.asset.url, asset_fingerprint: fingerprint, viewer_url: pdf.viewer_url, pdf_url: pdf.url, sha256, bytes: bytesLength, storage_path: storagePath, processing };
     await s.storage.from(BUCKET).upload(marker, new Blob([JSON.stringify(payload)], { type: "application/json" }), { contentType: "application/json", upsert: true });
-    const next = recordObservation(learning, config.retailer, "downloaded", checkedAt, resolved.asset.url);
+    const next = rememberAsset(recordObservation(learning, config.retailer, "downloaded", checkedAt, resolved.asset.url), fingerprint, resolved.asset.url, storagePath);
     await writeLearning(s, next);
     return NextResponse.json({ ok: true, ...payload, learning: next });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "error", manual, error: message };
+    const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "error" as const, manual, error: message };
     await s.storage.from(BUCKET).upload(marker, new Blob([JSON.stringify(payload)], { type: "application/json" }), { contentType: "application/json", upsert: true });
     const next = recordObservation(learning, config.retailer, "error", checkedAt, config.sourcePage);
     await writeLearning(s, next);
