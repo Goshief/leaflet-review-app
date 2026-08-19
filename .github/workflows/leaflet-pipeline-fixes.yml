@@ -7,10 +7,13 @@ on:
   pull_request:
     paths:
       - "lib/leaflet-review/**"
+      - "lib/leaflet-monitor/connector-with-origin.ts"
       - "lib/leaflet-monitor/discovery.ts"
+      - "lib/leaflet-monitor/pdf-validation.ts"
       - "lib/leaflet-monitor/retailers.ts"
       - "scripts/test-page-finalization.mts"
       - "scripts/test-page-claim.mts"
+      - "scripts/test-pdf-validation.mts"
       - "scripts/test-retailer-config.mts"
       - "scripts/test-source-validation.mts"
       - "tsconfig.json"
@@ -31,6 +34,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-retailer-config.mts
       - name: Retailer source validation regression
         run: node --experimental-strip-types scripts/test-source-validation.mts
+      - name: PDF integrity regression
+        run: node --experimental-strip-types scripts/test-pdf-validation.mts
       - name: Strict page finalization regression
         run: node --experimental-strip-types scripts/test-page-finalization.mts
       - name: Exactly-once page claim regression
