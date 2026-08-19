@@ -188,8 +188,8 @@ function toVerifiedOffers(
     const price = typeof offer.price_total === "number" && Number.isFinite(offer.price_total)
       ? offer.price_total
       : null;
-    const safe = Boolean(name && price != null);
-    const confidence = safe ? 0.72 : 0.35;
+    const hasMinimumFields = Boolean(name && price != null);
+    const confidence = hasMinimumFields ? 0.45 : 0.2;
     return {
       store_id: retailer,
       source_type: "leaflet",
@@ -206,14 +206,14 @@ function toVerifiedOffers(
       typical_price_per_unit: offer.typical_price_per_unit ?? null,
       price_with_loyalty_card: offer.price_with_loyalty_card ?? null,
       has_loyalty_card_price: offer.has_loyalty_card_price ?? false,
-      notes: [offer.notes, "Lokální OCR/heuristika — před zápisem vizuálně zkontroluj."].filter(Boolean).join(" | "),
+      notes: [offer.notes, "Lokální heuristika je pouze kandidát. Nic se automaticky neschvaluje."].filter(Boolean).join(" | "),
       brand: offer.brand ?? null,
       category: offer.category ?? null,
       confidence,
-      status: safe ? "approved" : "quarantine",
-      verification_reason: safe
-        ? "Název a cena byly nalezeny lokální OCR heuristikou."
-        : "Lokální OCR nedokázalo bezpečně určit název a cenu.",
+      status: "quarantine",
+      verification_reason: hasMinimumFields
+        ? "Kandidát byl nalezen lokální heuristikou, ale vazba produktu a ceny není dostatečně ověřená. Vyžaduje ruční kontrolu."
+        : "Chybí jednoznačně doložený název nebo cena. Bez ruční kontroly se nesmí zapsat jako nabídka.",
     };
   });
 }
