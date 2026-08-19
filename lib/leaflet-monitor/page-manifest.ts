@@ -185,14 +185,15 @@ async function resolvePennyManifest(viewerUrl: string): Promise<LeafletPageManif
   const numbers = Array.from({ length: pageCount }, (_, i) => i + 1);
 
   const pages = await mapWithConcurrency(numbers, 6, async (pageNo) => {
-    const url = pageNo === 1 ? root : new URL(`${pageNo}/`, root).toString();
-    const fetched = pageNo === 1 ? rootFetch : await fetchText(url);
+    const explicitPageUrl = new URL(`${pageNo}/`, root).toString();
+    const fetched = await fetchText(explicitPageUrl);
     if (!fetched.response.ok) throw new Error(`Penny strana ${pageNo} HTTP ${fetched.response.status}`);
+    const text = stripHtml(fetched.text);
     return {
       page_no: pageNo,
-      text: stripHtml(fetched.text),
+      text,
       image_url: null,
-      source_url: fetched.response.url || url,
+      source_url: fetched.response.url || explicitPageUrl,
       source_kind: "penny_html" as const,
       external_id: null,
       alt_text: null,
