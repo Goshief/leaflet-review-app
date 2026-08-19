@@ -32,6 +32,7 @@ export type ExtractedCandidate = {
   minimum_quantity: number | null;
   field_evidence: Record<string, unknown>;
   extraction_payload: Record<string, unknown>;
+  extractor_version: string;
   confidence: number | null;
   status: "unreviewed" | "quarantine";
   review_reason: string | null;
