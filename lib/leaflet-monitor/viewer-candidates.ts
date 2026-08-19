@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const VIEWER_EXTRACTOR_VERSION = "viewer-text-price-anchors-v1";
+export const VIEWER_EXTRACTOR_VERSION = "viewer-text-price-anchors-v2";
 
 export type ViewerCandidate = {
   candidate_key: string;
@@ -16,13 +16,14 @@ export type ViewerCandidate = {
   extractor_version: string;
 };
 
-const PRICE_RE = /(?<!\d)(\d{1,3}[,.]\d{2})(?!\d)/g;
+const PRICE_RE = /(?<!\d)(\d{1,3}(?:[,.]\d{2}|,-))(?!\d)/g;
 const LETTER_RE = /[A-Za-zÁ-ž]/;
 const SECONDARY_CONTEXT = /(?:1\s*kg|100\s*g|1\s*l|100\s*ml|běžná\s*cena|původní\s*cena|cena\s+za|KC:|A:)/i;
 const NOISE = /(?:AKCE|pouze|sleva|-?\d+\s*%|do\s+vyprodání\s+zásob|s\s+klubem|bez\s+klubu)/gi;
 
 function numberPrice(raw: string) {
-  const n = Number(raw.replace(",", "."));
+  const normalized = raw.endsWith(",-" ) ? `${raw.slice(0, -2)}.00` : raw.replace(",", ".");
+  const n = Number(normalized);
   return Number.isFinite(n) && n > 0 && n < 10000 ? n : null;
 }
 
