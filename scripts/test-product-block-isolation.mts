@@ -41,7 +41,7 @@ try {
   ];
 
   const rows = extractLeafletCandidates(words, { pageNo: 1, validFrom: "2026-08-19", validTo: "2026-08-25" });
-  assert.equal(EXTRACTOR_VERSION, "leaflet-layout-v8", "regression must run against v8");
+  assert.equal(EXTRACTOR_VERSION, "leaflet-layout-v9", "regression must run against v9");
   assert.equal(rows.length, 2, "two main prices must produce exactly two product blocks");
 
   const byPrice = new Map(rows.map((r: any) => [r.price_sale, r]));
