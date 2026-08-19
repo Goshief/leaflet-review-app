@@ -77,8 +77,6 @@ async function capture(req: Request) {
 
     const sha256 = createHash("sha256").update(origin.bytes).digest("hex");
     const shortSha = sha256.slice(0, 16);
-    const extension = origin.isPdf ? "pdf" : "html";
-    const contentType = origin.isPdf ? "application/pdf" : "text/html";
 
     if (origin.isPdf) {
       const { data: document } = await supabase
@@ -103,15 +101,48 @@ async function capture(req: Request) {
           storage_path: document.storage_path,
         });
       }
+
+      const storagePath = `${raw}/origin/${todayPrague()}__${shortSha}.pdf`;
+      const { error } = await supabase.storage.from(BUCKET).upload(storagePath, origin.bytes, {
+        contentType: "application/pdf",
+        cacheControl: "31536000",
+        upsert: false,
+      });
+      if (error && !/already exists|duplicate|resource exists/i.test(error.message || "")) {
+        throw new Error(`Storage upload: ${error.message}`);
+      }
+      return NextResponse.json({
+        ok: true,
+        retailer: raw,
+        status: error ? "already_stored" : "stored",
+        asset_url: asset.url,
+        final_url: origin.response.url,
+        origin_kind: "pdf",
+        origin_sha256: sha256,
+        origin_bytes: origin.bytes.byteLength,
+        origin_content_type: origin.contentType,
+        storage_path: storagePath,
+      });
     }
 
-    const storagePath = `${raw}/origin/${todayPrague()}__${shortSha}.${extension}`;
-    const { error } = await supabase.storage.from(BUCKET).upload(storagePath, origin.bytes, {
-      contentType,
-      cacheControl: "31536000",
-      upsert: false,
-    });
-
+    const envelope = {
+      version: 1,
+      retailer: raw,
+      captured_at: new Date().toISOString(),
+      asset_url: asset.url,
+      final_url: origin.response.url,
+      origin_content_type: origin.contentType,
+      origin_sha256: sha256,
+      origin_bytes: origin.bytes.byteLength,
+      encoding: "base64" as const,
+      payload: Buffer.from(origin.bytes).toString("base64"),
+    };
+    const storagePath = `${raw}/origin/${todayPrague()}__${shortSha}.origin.json`;
+    const { error } = await supabase.storage.from(BUCKET).upload(
+      storagePath,
+      new Blob([JSON.stringify(envelope)], { type: "application/json" }),
+      { contentType: "application/json", cacheControl: "31536000", upsert: false },
+    );
     if (error && !/already exists|duplicate|resource exists/i.test(error.message || "")) {
       throw new Error(`Storage upload: ${error.message}`);
     }
@@ -122,7 +153,7 @@ async function capture(req: Request) {
       status: error ? "already_stored" : "stored",
       asset_url: asset.url,
       final_url: origin.response.url,
-      origin_kind: origin.isPdf ? "pdf" : "html",
+      origin_kind: "html_snapshot",
       origin_sha256: sha256,
       origin_bytes: origin.bytes.byteLength,
       origin_content_type: origin.contentType,
