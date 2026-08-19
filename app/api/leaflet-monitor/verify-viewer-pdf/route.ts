@@ -31,17 +31,41 @@ function inferPageCount(bytes: Uint8Array) {
   };
 }
 
+async function pdfJsPageCount(bytes: Uint8Array) {
+  const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+  (globalThis as typeof globalThis & { pdfjsWorker?: unknown }).pdfjsWorker = {
+    WorkerMessageHandler: worker.WorkerMessageHandler,
+  };
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const task = pdfjs.getDocument({ data: bytes });
+  const doc = await task.promise;
+  try {
+    return doc.numPages;
+  } finally {
+    await doc.destroy();
+  }
+}
+
 async function verifyPdf(url: string) {
   const response = await fetch(url, { redirect: "follow", cache: "no-store", headers: { "User-Agent": USER_AGENT, Accept: "application/pdf,*/*;q=0.8" } });
   if (!response.ok) throw new Error(`PDF HTTP ${response.status}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   const signature = new TextDecoder().decode(bytes.slice(0, 5));
   if (signature !== "%PDF-") throw new Error(`Odkaz nevrátil PDF: ${response.headers.get("content-type") || "unknown"}`);
+  let pdfjs_page_count: number | null = null;
+  let pdfjs_error: string | null = null;
+  try {
+    pdfjs_page_count = await pdfJsPageCount(bytes);
+  } catch (error) {
+    pdfjs_error = error instanceof Error ? error.message : String(error);
+  }
   return {
     url: response.url || url,
     bytes: bytes.byteLength,
     sha256: createHash("sha256").update(bytes).digest("hex"),
     ...inferPageCount(bytes),
+    pdfjs_page_count,
+    pdfjs_error,
     content_type: response.headers.get("content-type"),
     signature,
   };
@@ -66,14 +90,14 @@ export async function GET(req: Request) {
       try {
         const verified = await verifyPdf(pdfUrl);
         attempts.push({ ok: true, ...verified });
-        if (verified.page_tree_count === manifest.page_count || verified.page_object_count === manifest.page_count) {
+        if (verified.pdfjs_page_count === manifest.page_count || verified.page_tree_count === manifest.page_count || verified.page_object_count === manifest.page_count) {
           return NextResponse.json({ ok: true, retailer, manifest_page_count: manifest.page_count, selected: verified, attempts });
         }
       } catch (error) {
         attempts.push({ ok: false, url: pdfUrl, error: error instanceof Error ? error.message : String(error) });
       }
     }
-    return NextResponse.json({ ok: false, retailer, manifest_page_count: manifest.page_count, error: "Žádné PDF nemá stejné page-tree metadata jako manifest.", attempts }, { status: 422 });
+    return NextResponse.json({ ok: false, retailer, manifest_page_count: manifest.page_count, error: "Žádné PDF nemá stejný počet stran jako manifest.", attempts }, { status: 422 });
   } catch (error) {
     return NextResponse.json({ ok: false, retailer, error: error instanceof Error ? error.message : String(error) }, { status: 502 });
   }
