@@ -73,11 +73,12 @@ export async function GET() {
       .eq("storage_bucket", BUCKET)
       .eq("storage_path", testPath)
       .single();
-    if (docError || !testDoc) throw new Error(docError?.message || "Testovací dokument nevznikl.");
-    testLeafletId = testDoc.id;
-    importId = testDoc.import_id;
+    if (docError || !testDoc?.id) throw new Error(docError?.message || "Testovací dokument nevznikl.");
+    const leafletId = String(testDoc.id);
+    testLeafletId = leafletId;
+    importId = typeof testDoc.import_id === "string" ? testDoc.import_id : null;
 
-    const afterFailure = await pageSnapshot(s, testLeafletId);
+    const afterFailure = await pageSnapshot(s, leafletId);
     const failPages = afterFailure.pages.filter((x: any) => x.status === "failed");
     const completedBefore = afterFailure.pages.filter((x: any) => x.status === "completed").map((x: any) => x.page_no);
 
@@ -90,7 +91,7 @@ export async function GET() {
       bytes,
     });
 
-    const afterResume = await pageSnapshot(s, testLeafletId);
+    const afterResume = await pageSnapshot(s, leafletId);
     const page1 = afterResume.pages.find((x: any) => x.page_no === 1);
     const page2 = afterResume.pages.find((x: any) => x.page_no === 2);
     const page3 = afterResume.pages.find((x: any) => x.page_no === 3);
