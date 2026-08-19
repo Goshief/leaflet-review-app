@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireOperatorApi } from "@/lib/auth/guards";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { emptyLearningState, type RetailerId, type RetailerLearningState } from "@/lib/leaflet-monitor/learning";
+import { emptyLearningState, type RetailerLearningState } from "@/lib/leaflet-monitor/learning";
+import { RETAILERS } from "@/lib/leaflet-monitor/retailers";
 
 export const runtime = "nodejs";
 
 const BUCKET = "leaflet-intake";
-const RETAILERS: Array<{ id: RetailerId; name: string; source_url: string; connector: "active" | "pending" }> = [
-  { id: "lidl", name: "Lidl", source_url: "https://www.lidl.cz/", connector: "active" },
-  { id: "kaufland", name: "Kaufland", source_url: "https://www.kaufland.cz/", connector: "active" },
-  { id: "penny", name: "Penny", source_url: "https://www.penny.cz/nabidky/letaky", connector: "active" },
-  { id: "billa", name: "Billa", source_url: "https://www.billa.cz/letaky-billa/velky-letak", connector: "active" },
-  { id: "albert", name: "Albert", source_url: "https://www.albert.cz/aktualni-letaky", connector: "active" },
-];
 
 async function readJson<T>(supabase: any, path: string): Promise<T | null> {
   const { data, error } = await supabase.storage.from(BUCKET).download(path);
