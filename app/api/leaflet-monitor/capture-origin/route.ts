@@ -78,12 +78,18 @@ async function capture(req: Request) {
     const sha256 = createHash("sha256").update(origin.bytes).digest("hex");
     const shortSha = sha256.slice(0, 16);
     const extension = origin.isPdf ? "pdf" : "html";
-    const contentType = origin.isPdf ? "application/pdf" : "text/html; charset=utf-8";
+    const contentType = origin.isPdf ? "application/pdf" : "text/html";
 
     if (origin.isPdf) {
-      const { data: existing } = await supabase.storage.from(BUCKET).list(raw, { search: shortSha, limit: 50 });
-      const found = (existing || []).find((item: { name?: string }) => item.name?.includes(shortSha) && item.name?.endsWith(".pdf"));
-      if (found?.name) {
+      const { data: document } = await supabase
+        .from("leaflet_documents")
+        .select("storage_path,filename")
+        .eq("retailer_id", raw)
+        .ilike("filename", `%${shortSha}%`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (document?.storage_path) {
         return NextResponse.json({
           ok: true,
           retailer: raw,
@@ -94,7 +100,7 @@ async function capture(req: Request) {
           origin_sha256: sha256,
           origin_bytes: origin.bytes.byteLength,
           origin_content_type: origin.contentType,
-          storage_path: `${raw}/${found.name}`,
+          storage_path: document.storage_path,
         });
       }
     }
