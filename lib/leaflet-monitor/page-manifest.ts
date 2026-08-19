@@ -174,33 +174,74 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item
   return results;
 }
 
+function pennyPagePayload(text: string, identifier: string, pageNo: number) {
+  const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const header = new RegExp(`^.*?${escaped}\\s+${pageNo}\\s+`, "i");
+  return text.replace(header, "").trim();
+}
+
+function isolatePennyFirstPage(rootText: string, page2Text: string, identifier: string) {
+  const root = rootText.replace(/\s+/g, " ").trim();
+  const page2Payload = pennyPagePayload(page2Text, identifier, 2);
+  let cutAt = -1;
+  for (const size of [180, 140, 100, 70, 50]) {
+    if (page2Payload.length < size) continue;
+    const anchor = page2Payload.slice(0, size);
+    const at = root.indexOf(anchor);
+    if (at > 0) {
+      cutAt = at;
+      break;
+    }
+  }
+  if (cutAt < 0) {
+    throw new Error("Penny strana 1: nepodařilo se najít bezpečnou hranici začátku strany 2.");
+  }
+  const isolated = root.slice(0, cutAt).trim();
+  const navPrefix = new RegExp(`^${identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(?:2\\s+3\\s+4[\\d\\s]*?)?${identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*`, "i");
+  return isolated.replace(navPrefix, "").trim();
+}
+
 async function resolvePennyManifest(viewerUrl: string): Promise<LeafletPageManifest> {
   const rootFetch = await fetchText(viewerUrl);
   if (!rootFetch.response.ok) throw new Error(`Penny viewer HTTP ${rootFetch.response.status}`);
   const root = (rootFetch.response.url || viewerUrl).replace(/\/?$/, "/");
+  const identifier = new URL(root).pathname.split("/").filter(Boolean).pop() || "penny-viewer";
   const pageNumbers = [...rootFetch.text.matchAll(/href=["'](?:\.\/)?(\d+)\/?["']/gi)]
     .map((match) => Number(match[1]))
     .filter((n) => Number.isInteger(n) && n > 0 && n < 500);
   const pageCount = pageNumbers.length ? Math.max(...pageNumbers) : 1;
   const numbers = Array.from({ length: pageCount }, (_, i) => i + 1);
 
-  const pages = await mapWithConcurrency(numbers, 6, async (pageNo) => {
-    const explicitPageUrl = new URL(`${pageNo}/`, root).toString();
-    const fetched = await fetchText(explicitPageUrl);
+  const isolatedPages = await mapWithConcurrency(numbers.filter((n) => n >= 2), 6, async (pageNo) => {
+    const url = new URL(`${pageNo}/`, root).toString();
+    const fetched = await fetchText(url);
     if (!fetched.response.ok) throw new Error(`Penny strana ${pageNo} HTTP ${fetched.response.status}`);
-    const text = stripHtml(fetched.text);
     return {
       page_no: pageNo,
-      text,
+      text: stripHtml(fetched.text),
       image_url: null,
-      source_url: fetched.response.url || explicitPageUrl,
+      source_url: fetched.response.url || url,
       source_kind: "penny_html" as const,
       external_id: null,
       alt_text: null,
     };
   });
 
-  const identifier = new URL(root).pathname.split("/").filter(Boolean).pop() || "penny-viewer";
+  const rootText = stripHtml(rootFetch.text);
+  const page2 = isolatedPages[0];
+  if (!page2 || page2.page_no !== 2) throw new Error("Penny strana 2 chybí; nelze izolovat stranu 1.");
+  const firstText = isolatePennyFirstPage(rootText, page2.text, identifier);
+  const firstPage: LeafletPageSource = {
+    page_no: 1,
+    text: firstText,
+    image_url: null,
+    source_url: root,
+    source_kind: "penny_html",
+    external_id: null,
+    alt_text: null,
+  };
+
+  const pages = [firstPage, ...isolatedPages];
   return { retailer: "penny", viewer_url: viewerUrl, identifier, page_count: pages.length, pdf_urls: [], pages };
 }
 
@@ -219,6 +260,7 @@ export function validatePageManifest(manifest: LeafletPageManifest) {
     if (page.page_no !== expected) errors.push(`chybí nebo je mimo pořadí strana ${expected}`);
     if (!page.source_url) errors.push(`strana ${expected} nemá source_url`);
     if (!page.text.trim() && !page.image_url) errors.push(`strana ${expected} nemá text ani image_url`);
+    if (/^redirect\b|not redirected automatically|follow the link/i.test(page.text.trim())) errors.push(`strana ${expected} obsahuje pouze redirect text`);
   }
   return { ok: errors.length === 0, errors };
 }
