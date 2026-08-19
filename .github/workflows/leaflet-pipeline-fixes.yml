@@ -12,8 +12,11 @@ on:
       - "lib/leaflet-monitor/discovery.ts"
       - "lib/leaflet-monitor/pdf-validation.ts"
       - "lib/leaflet-monitor/retailers.ts"
+      - "lib/security/headers.ts"
+      - "next.config.ts"
       - "scripts/test-page-finalization.mts"
       - "scripts/test-page-claim.mts"
+      - "scripts/test-pdf-frame-headers.mts"
       - "scripts/test-pdf-validation.mts"
       - "scripts/test-retailer-config.mts"
       - "scripts/test-source-validation.mts"
@@ -37,6 +40,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-source-validation.mts
       - name: PDF integrity regression
         run: node --experimental-strip-types scripts/test-pdf-validation.mts
+      - name: PDF framing regression
+        run: node --experimental-strip-types scripts/test-pdf-frame-headers.mts
       - name: Strict page finalization regression
         run: node --experimental-strip-types scripts/test-page-finalization.mts
       - name: Exactly-once page claim regression
