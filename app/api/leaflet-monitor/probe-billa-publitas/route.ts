@@ -23,9 +23,10 @@ export async function GET(req: Request) {
     const pubText = await pubRes.text();
     if (!pubRes.ok) throw new Error(`Publitas publication HTTP ${pubRes.status}: ${pubText.slice(0,500)}`);
     const pub = JSON.parse(pubText) as any;
+    const spreads = Array.isArray(pub?.spreads) ? pub.spreads : [];
     const pages: Array<any> = [];
     let pageNo = 0;
-    for (const spread of Array.isArray(pub?.spreads) ? pub.spreads : []) {
+    for (const spread of spreads) {
       const pagePaths = Array.isArray(spread?.pages) ? spread.pages : [];
       const hotspots = Array.isArray(spread?.hotspots) ? spread.hotspots : [];
       for (let i = 0; i < pagePaths.length; i++) {
@@ -35,25 +36,22 @@ export async function GET(req: Request) {
           const hp = Number(h?.page ?? h?.pageNumber ?? h?.page_number);
           return !Number.isFinite(hp) || hp === pageNo || hp === i || hp === i + 1;
         });
-        pages.push({
-          page_no: pageNo,
-          image_base: pagePath,
-          image_url: pagePath ? `https://view.publitas.com${pagePath}-at1600.jpg` : null,
-          hotspot_count: pageHotspots.length,
-          hotspots: pageHotspots.slice(0,50),
-        });
+        pages.push({ page_no: pageNo, image_base: pagePath, image_url: pagePath ? `https://view.publitas.com${pagePath}-at1600.jpg` : null, hotspot_count: pageHotspots.length, hotspots: pageHotspots.slice(0,50) });
       }
     }
+    const compact = (spread:any) => spread ? Object.fromEntries(Object.entries(spread).map(([k,v]) => [k, Array.isArray(v) ? { type:"array", length:v.length, sample:v.slice(0,2) } : (v && typeof v === "object" ? { type:"object", keys:Object.keys(v as object).slice(0,30) } : v)])) : null;
     return NextResponse.json({
       ok: true,
       publication: hit,
       sizes: pub?.sizes ?? null,
-      spread_count: Array.isArray(pub?.spreads) ? pub.spreads.length : 0,
+      spread_count: spreads.length,
       page_count: pages.length,
       page1: pages[0] ?? null,
       page2: pages[1] ?? null,
       total_hotspots: pages.reduce((sum,p)=>sum+Number(p.hotspot_count||0),0),
       top_level_keys: Object.keys(pub || {}),
+      spread0_shape: compact(spreads[0]),
+      spread1_shape: compact(spreads[1]),
     });
   } catch (error) {
     return NextResponse.json({ ok: false, publication_id: wanted, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
