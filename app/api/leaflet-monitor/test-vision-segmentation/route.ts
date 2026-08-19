@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const named = result.blocks.filter((b) => b.product_name).length;
     const priced = result.blocks.filter((b) => b.price_sale != null).length;
     const highConfidence = result.blocks.filter((b) => b.confidence >= 0.8).length;
-    return NextResponse.json({ ok: true, page_no: pageNo, block_count: result.blocks.length, named, priced, high_confidence: highConfidence, ...result });
+    return NextResponse.json({ ok: true, block_count: result.blocks.length, named, priced, high_confidence: highConfidence, ...result });
   } catch (error) {
     return NextResponse.json({ ok: false, page_no: pageNo, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
