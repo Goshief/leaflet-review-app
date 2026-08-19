@@ -6,6 +6,6 @@
     { "path": "/api/cron/fetch-lidl-leaflet", "schedule": "17 7 * * *" },
     { "path": "/api/cron/fetch-penny-leaflet", "schedule": "23 7 * * *" },
     { "path": "/api/cron/fetch-billa-leaflet", "schedule": "29 7 * * *" },
-    { "path": "/api/cron/fetch-albert-leaflet", "schedule": "35 7 * * *" }
+    { "path": "/api/cron/send-leaflet-notifications", "schedule": "45 7 * * *" }
   ]
 }
