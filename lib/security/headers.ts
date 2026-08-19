@@ -17,6 +17,16 @@ export const SECURITY_HEADERS = [
   },
 ] as const;
 
+export const PDF_VIEWER_HEADERS = [
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  {
+    key: "Content-Security-Policy",
+    value: "default-src 'none'; frame-ancestors 'self'; sandbox allow-same-origin allow-scripts allow-forms allow-downloads",
+  },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Cache-Control", value: "private, no-store, max-age=0" },
+] as const;
+
 type HeaderResponse = {
   headers: Headers;
 };
