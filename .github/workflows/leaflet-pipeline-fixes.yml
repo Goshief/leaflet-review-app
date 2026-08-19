@@ -7,10 +7,12 @@ on:
   pull_request:
     paths:
       - "lib/leaflet-review/**"
+      - "lib/leaflet-monitor/discovery.ts"
       - "lib/leaflet-monitor/retailers.ts"
       - "scripts/test-page-finalization.mts"
       - "scripts/test-page-claim.mts"
       - "scripts/test-retailer-config.mts"
+      - "scripts/test-source-validation.mts"
       - "tsconfig.json"
       - ".github/workflows/leaflet-pipeline-fixes.yml"
 
@@ -27,6 +29,8 @@ jobs:
       - run: npm ci
       - name: Retailer configuration regression
         run: node --experimental-strip-types scripts/test-retailer-config.mts
+      - name: Retailer source validation regression
+        run: node --experimental-strip-types scripts/test-source-validation.mts
       - name: Strict page finalization regression
         run: node --experimental-strip-types scripts/test-page-finalization.mts
       - name: Exactly-once page claim regression
