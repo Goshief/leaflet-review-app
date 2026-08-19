@@ -7,8 +7,22 @@ export type LeafletAsset = {
   score: number;
 };
 
+export type SourceHtmlValidation = {
+  ok: boolean;
+  reason: "ok" | "empty" | "not_html" | "blocked";
+};
+
 const NEGATIVE = /udržitelnost|udrzitelnost|výroční|vyrocni|privacy|soukrom|přístupnost|pristupnost|compliance|whistle|kariér|karier|dodavatel|media|tiskov/i;
 const LEAFLET = /leták|letak|leaflet|brožur|brozur|katalog|catalog|prohlédnout|prohlednout|prolistovat|akční|akcni|nabídk|nabidk/i;
+const BLOCKED_SOURCE = /\b(?:access denied|request blocked|temporarily blocked|verify you are human|robot check|captcha challenge|attention required[^<]{0,40}cloudflare)\b/i;
+
+export function validateRetailerSourceHtml(html: string): SourceHtmlValidation {
+  const trimmed = html.trim();
+  if (trimmed.length < 200) return { ok: false, reason: "empty" };
+  if (!/<(?:html|body|main|a)\b/i.test(trimmed)) return { ok: false, reason: "not_html" };
+  if (BLOCKED_SOURCE.test(trimmed)) return { ok: false, reason: "blocked" };
+  return { ok: true, reason: "ok" };
+}
 
 function decodeHtml(value: string) {
   return value
@@ -89,6 +103,9 @@ function retailerScore(retailer: RetailerId, url: string, label: string) {
 }
 
 export function discoverLeafletAssets(html: string, base: string, retailer: RetailerId, now = new Date()): LeafletAsset[] {
+  const sourceValidation = validateRetailerSourceHtml(html);
+  if (!sourceValidation.ok) throw new Error(`Retailer source validation failed: ${sourceValidation.reason}`);
+
   const seen = new Set<string>();
   const candidates: LeafletAsset[] = [];
   for (const link of links(html, base)) {

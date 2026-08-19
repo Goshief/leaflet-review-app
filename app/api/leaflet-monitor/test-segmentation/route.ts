@@ -9,6 +9,14 @@ export const maxDuration = 300;
 const BUCKET = "leaflet-intake";
 const SOURCE_PATH = "billa/billa-2026-08-19__a7a0e1fef9b45d3b.pdf";
 
+const FORBIDDEN_MIXES = [
+  { id: "chicken-vs-bacon", left: /\bkuře\b/i, right: /anglická|slanina/i },
+  { id: "toffifee-vs-linteo", left: /toffifee/i, right: /linteo|toaletní/i },
+  { id: "pilsner-vs-toilet-paper", left: /pilsner/i, right: /\b1\s*m\b|0[,.]28|papír|toaletní/i },
+  { id: "grapes-vs-potatoes", left: /hrozny/i, right: /brambory/i },
+  { id: "combo-vs-butter", left: /\b28[,.]83\b/, right: /jihočeské máslo/i },
+];
+
 async function cleanup(s:any,leafletId:string|null,importId:string|null){
   if(!leafletId)return;
   const{data:candidates}=await s.from("leaflet_item_candidates").select("id").eq("leaflet_id",leafletId);
@@ -35,7 +43,8 @@ export async function GET(){
     const mixed=candidates.filter((r:any)=>{const text=String(r.source_text||"");const names=(r.extraction_payload?.name_candidates??[]) as unknown[];return names.length>=4||text.split(" | ").length>=13;});
     const named=candidates.filter((r:any)=>typeof r.product_name==="string"&&r.product_name.trim());
     const quarantine=candidates.filter((r:any)=>r.status==="quarantine");
-    return NextResponse.json({ok:true,extractor_version:candidates[0]?.extractor_version??null,total:candidates.length,named:named.length,quarantine:quarantine.length,suspiciously_mixed:mixed.length,candidates:candidates.map((r:any)=>({key:r.candidate_key,name:r.product_name,price:r.price_sale,standard:r.price_standard,loyalty:r.price_loyalty,without_loyalty:r.price_without_loyalty,pack:r.pack_text,status:r.status,reason:r.review_reason,source:r.source_text,bounds:r.extraction_payload?.block_bounds??null,name_candidates:r.extraction_payload?.name_candidates??[]}))});
+    const violations=FORBIDDEN_MIXES.flatMap(rule=>candidates.filter((r:any)=>{const text=String(r.source_text||"");return rule.left.test(text)&&rule.right.test(text);}).map((r:any)=>({id:rule.id,key:r.candidate_key,source:r.source_text})));
+    return NextResponse.json({ok:true,pass_4b:violations.length===0,extractor_version:candidates[0]?.extractor_version??null,total:candidates.length,named:named.length,quarantine:quarantine.length,suspiciously_mixed:mixed.length,violations,candidates:candidates.map((r:any)=>({key:r.candidate_key,name:r.product_name,price:r.price_sale,standard:r.price_standard,loyalty:r.price_loyalty,without_loyalty:r.price_without_loyalty,pack:r.pack_text,status:r.status,reason:r.review_reason,source:r.source_text,bounds:r.extraction_payload?.block_bounds??null,name_candidates:r.extraction_payload?.name_candidates??[]}))});
   }catch(error){return NextResponse.json({ok:false,error:error instanceof Error?error.message:String(error)},{status:500});}
   finally{try{await cleanup(s,leafletId,importId);}catch(error){console.error("segmentation test cleanup failed",error);}}
 }

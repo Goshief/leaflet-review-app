@@ -1,0 +1,57 @@
+name: Leaflet pipeline fixes
+
+on:
+  push:
+    branches:
+      - fix/leaflet-pipeline-1-3-v2
+  pull_request:
+    paths:
+      - "app/api/leaflet-monitor/pdf/route.ts"
+      - "components/leaflet/monitor-panel.tsx"
+      - "lib/leaflet-review/**"
+      - "lib/leaflet-monitor/**"
+      - "lib/security/headers.ts"
+      - "next.config.ts"
+      - "scripts/test-page-finalization.mts"
+      - "scripts/test-page-claim.mts"
+      - "scripts/test-pdf-frame-headers.mts"
+      - "scripts/test-pdf-validation.mts"
+      - "scripts/test-retailer-config.mts"
+      - "scripts/test-source-validation.mts"
+      - "scripts/test-viewer-all-candidates.mts"
+      - "scripts/test-viewer-preview.mts"
+      - "scripts/test-viewer-processing-contract.mts"
+      - "tsconfig.json"
+      - ".github/workflows/leaflet-pipeline-fixes.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Retailer configuration regression
+        run: node --experimental-strip-types scripts/test-retailer-config.mts
+      - name: Retailer source validation regression
+        run: node --experimental-strip-types scripts/test-source-validation.mts
+      - name: PDF integrity regression
+        run: node --experimental-strip-types scripts/test-pdf-validation.mts
+      - name: PDF framing regression
+        run: node --experimental-strip-types scripts/test-pdf-frame-headers.mts
+      - name: Viewer all-candidates regression
+        run: node --experimental-strip-types scripts/test-viewer-all-candidates.mts
+      - name: Viewer preview regression
+        run: node --experimental-strip-types scripts/test-viewer-preview.mts
+      - name: Viewer processing persistence regression
+        run: node --experimental-strip-types scripts/test-viewer-processing-contract.mts
+      - name: Strict page finalization regression
+        run: node --experimental-strip-types scripts/test-page-finalization.mts
+      - name: Exactly-once page claim regression
+        run: node --experimental-strip-types scripts/test-page-claim.mts
+      - name: TypeScript compile check
+        run: npx tsc --noEmit

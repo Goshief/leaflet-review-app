@@ -20,6 +20,7 @@
       }
     ],
     "paths": {
+      "@/lib/leaflet-review/processor": ["./lib/leaflet-review/processor-strict.ts"],
       "@/*": ["./*"]
     }
   },
