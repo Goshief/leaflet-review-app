@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runGenericLeafletConnector } from "@/lib/leaflet-monitor/generic-fetcher";
 import { captureCurrentLeafletOrigin } from "@/lib/leaflet-monitor/origin-capture";
+import { ingestViewerPages } from "@/lib/leaflet-monitor/viewer-processing";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { RetailerId } from "@/lib/leaflet-monitor/learning";
 
@@ -13,6 +14,7 @@ type ConnectorConfig = {
 };
 
 const CAPTURE_STATUSES = new Set(["downloaded", "unchanged", "asset_found"]);
+const VIEWER_RETAILERS = new Set<RetailerId>(["lidl", "kaufland", "penny"]);
 
 export async function runLeafletConnectorWithOrigin(req: Request, config: ConnectorConfig) {
   const response = await runGenericLeafletConnector(req, config);
@@ -35,7 +37,13 @@ export async function runLeafletConnectorWithOrigin(req: Request, config: Connec
 
   try {
     const origin = await captureCurrentLeafletOrigin(supabase, config.retailer);
-    return NextResponse.json({ ...payload, origin });
+    let page_processing: unknown = null;
+    if (VIEWER_RETAILERS.has(config.retailer)) {
+      const assetUrl = typeof payload.asset_url === "string" ? payload.asset_url : origin.asset_url;
+      if (!assetUrl) throw new Error("Viewer retailer nemá asset_url pro stránkové zpracování.");
+      page_processing = await ingestViewerPages(supabase, config.retailer, assetUrl);
+    }
+    return NextResponse.json({ ...payload, origin, page_processing });
   } catch (error) {
     return NextResponse.json({
       ...payload,
