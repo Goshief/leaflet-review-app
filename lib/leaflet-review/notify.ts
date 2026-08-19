@@ -6,9 +6,11 @@ export async function sendLeafletNotification(supabase:any,leafletId:string){
   const recipient=(process.env.LEAFLET_ALERT_EMAIL||outbox.recipient||"").trim();
   const from=(process.env.LEAFLET_EMAIL_FROM||"").trim();
   if(!apiKey||!recipient||!from){
-    await supabase.from("leaflet_notification_outbox").update({status:"disabled",last_error:"Chybí RESEND_API_KEY, LEAFLET_ALERT_EMAIL nebo LEAFLET_EMAIL_FROM."}).eq("id",outbox.id);
-    await supabase.from("leaflet_documents").update({notification_status:"disabled"}).eq("id",leafletId);
-    return {sent:false,reason:"email_not_configured"};
+    const missing=[!apiKey?"RESEND_API_KEY":null,!recipient?"LEAFLET_ALERT_EMAIL":null,!from?"LEAFLET_EMAIL_FROM":null].filter(Boolean).join(", ");
+    const message=`Čeká na konfiguraci e-mailu: ${missing}.`;
+    await supabase.from("leaflet_notification_outbox").update({status:"pending",last_error:message}).eq("id",outbox.id);
+    await supabase.from("leaflet_documents").update({notification_status:"pending"}).eq("id",leafletId);
+    return {sent:false,reason:"email_not_configured",missing};
   }
   try{
     const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},body:JSON.stringify({from,to:[recipient],subject:outbox.subject,text:outbox.body_text})});
