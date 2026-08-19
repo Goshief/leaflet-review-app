@@ -37,7 +37,7 @@ function fakeSupabase(rows: Row[]) {
     claimLeafletPage(s, "leaflet-1", 3),
   ]);
   assert.equal(Number(first) + Number(second), 1, "only one concurrent caller may claim the page");
-  assert.equal(rows[0].status, "claimed");
+  assert.equal(rows[0].status, "processing");
 }
 
 {
@@ -48,7 +48,7 @@ function fakeSupabase(rows: Row[]) {
 }
 
 {
-  const rows: Row[] = [{ leaflet_id: "leaflet-1", page_no: 3, status: "claimed" }];
+  const rows: Row[] = [{ leaflet_id: "leaflet-1", page_no: 3, status: "processing" }];
   const s = fakeSupabase(rows);
   await failLeafletPageClaim(s, "leaflet-1", 3, new Error("boom"));
   assert.equal(rows[0].status, "failed");
