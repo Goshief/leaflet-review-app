@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireOperatorApi } from "@/lib/auth/guards";
+import { validatePdfBytes } from "@/lib/leaflet-monitor/pdf-validation";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -24,7 +25,15 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase.storage.from(BUCKET).download(path);
   if (error || !data) return new Response(error?.message ?? "PDF nebylo nalezeno.", { status: 404 });
 
-  const bytes = await data.arrayBuffer();
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  const validation = validatePdfBytes(bytes);
+  if (!validation.ok) {
+    return new Response(`Uložený objekt není platné PDF (${validation.reason}).`, {
+      status: 422,
+      headers: { "Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff" },
+    });
+  }
+
   const safeName = filename.replace(/[\r\n"]/g, "_");
   return new Response(bytes, {
     status: 200,
@@ -33,9 +42,6 @@ export async function GET(req: NextRequest) {
       "Content-Disposition": `inline; filename="${safeName}"`,
       "Cache-Control": "private, no-store, max-age=0",
       "X-Content-Type-Options": "nosniff",
-      // The global security policy intentionally blocks framing. This endpoint is
-      // the one exception: the operator UI embeds the original leaflet PDF from
-      // the same origin next to the review controls.
       "X-Frame-Options": "SAMEORIGIN",
       "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'; sandbox allow-same-origin allow-scripts allow-forms allow-downloads",
     },
