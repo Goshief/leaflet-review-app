@@ -20,6 +20,7 @@ on:
       - "scripts/test-source-validation.mts"
       - "scripts/test-viewer-all-candidates.mts"
       - "scripts/test-viewer-preview.mts"
+      - "scripts/test-viewer-processing-contract.mts"
       - "tsconfig.json"
       - ".github/workflows/leaflet-pipeline-fixes.yml"
 
@@ -46,6 +47,8 @@ jobs:
         run: node --experimental-strip-types scripts/test-viewer-all-candidates.mts
       - name: Viewer preview regression
         run: node --experimental-strip-types scripts/test-viewer-preview.mts
+      - name: Viewer processing persistence regression
+        run: node --experimental-strip-types scripts/test-viewer-processing-contract.mts
       - name: Strict page finalization regression
         run: node --experimental-strip-types scripts/test-page-finalization.mts
       - name: Exactly-once page claim regression
