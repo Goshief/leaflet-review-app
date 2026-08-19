@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 
 type VerifiedOffer = { extracted_name?: string | null; price_total?: number | null; price_standard?: number | null; price_with_loyalty_card?: number | null; valid_from?: string | null; valid_to?: string | null; brand?: string | null; category?: string | null; confidence?: number | null; status: "approved" | "quarantine"; verification_reason?: string | null; [key: string]: unknown; };
 type RetailerRow = { id: string; name: string; source_url: string; connector: "active" | "pending"; pdf_count: number; latest_pdf: string | null; last_check: { status?: string; checked_at?: string; error?: string } | null; learning: { confidence: number; preferred_weekdays: number[]; checks_this_week_limit: number; last_check_at: string | null; last_visit_at: string | null; last_visit_url: string | null; last_downloaded_at: string | null; next_check_at: string | null; download_hits: number[]; }; ai: { page_count: number | null; processed_pages: number; completed: boolean; next_page: number | null } | null; };
-type PageReview = { retailer: string; page: number; page_count: number; approved_count: number; quarantine_count: number; verified_offers: VerifiedOffer[]; };
+type PageReview = { retailer: string; filename: string; page: number; page_count: number; approved_count: number; quarantine_count: number; verified_offers: VerifiedOffer[]; };
 
 const DAYS = ["ne", "po", "út", "st", "čt", "pá", "so"];
 function when(value: string | null | undefined) { if (!value) return "—"; return new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)); }
-function statusLabel(row: RetailerRow) { if (row.connector === "pending") return "Čeká na konektor"; if (row.ai?.completed) return "AI hotovo"; if (row.ai?.page_count) return `AI ${row.ai.processed_pages}/${row.ai.page_count}`; if (row.last_check?.status === "downloaded") return "Nový leták stažen"; if (row.last_check?.status === "unchanged") return "Beze změny"; if (row.last_check?.status === "error") return "Chyba kontroly"; return "Připraveno k učení"; }
+function statusLabel(row: RetailerRow) { if (row.connector === "pending") return "Čeká na konektor"; if (row.ai?.completed) return "OCR hotovo"; if (row.ai?.page_count) return `OCR ${row.ai.processed_pages}/${row.ai.page_count}`; if (row.last_check?.status === "downloaded") return "Nový leták stažen"; if (row.last_check?.status === "unchanged") return "Beze změny"; if (row.last_check?.status === "error") return "Chyba kontroly"; return "Připraveno k učení"; }
 function errorMessage(value: unknown, fallback: string) { if (value instanceof Error) return value.message; if (typeof value === "string") return value; if (value && typeof value === "object") { const row = value as Record<string, unknown>; if (typeof row.error === "string") return row.error; if (typeof row.message === "string") return row.message; } return fallback; }
+function previewUrl(review: PageReview) { return `/api/leaflet-monitor/pdf?retailer=${encodeURIComponent(review.retailer)}&filename=${encodeURIComponent(review.filename)}#page=${review.page}&zoom=page-width`; }
 
 export function LeafletMonitorPanel() {
   const [rows, setRows] = useState<RetailerRow[]>([]);
@@ -45,8 +46,8 @@ export function LeafletMonitorPanel() {
     try {
       const response = await fetch("/api/leaflet-ai/process", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bucket: "leaflet-intake", path: `${row.id}/${row.latest_pdf}`, retailer: row.id, page, dry_run: true }) });
       const data = await response.json(); if (!response.ok || !data?.ok) throw new Error(data?.error ?? `HTTP ${response.status}`);
-      setReview({ retailer: row.id, page: data.page, page_count: data.page_count, approved_count: data.approved_count ?? 0, quarantine_count: data.quarantine_count ?? 0, verified_offers: data.verified_offers ?? [] });
-    } catch (cause) { setError(errorMessage(cause, "AI test stránky selhal.")); }
+      setReview({ retailer: row.id, filename: row.latest_pdf, page: data.page, page_count: data.page_count, approved_count: data.approved_count ?? 0, quarantine_count: data.quarantine_count ?? 0, verified_offers: data.verified_offers ?? [] });
+    } catch (cause) { setError(errorMessage(cause, "OCR test stránky selhal.")); }
     finally { setWorking(null); }
   }
 
@@ -79,14 +80,22 @@ export function LeafletMonitorPanel() {
             </dl>
             <div className="mt-3 flex flex-col gap-2">
               <button type="button" disabled={working === row.id} onClick={() => void runCheck(row)} className="rounded-lg bg-indigo-600 px-2.5 py-2 text-xs font-bold text-white disabled:opacity-50">{working === row.id ? "Kontroluji…" : "Zkontrolovat web teď"}</button>
-              {row.latest_pdf ? <button type="button" disabled={working === row.id} onClick={() => void testPage(row)} className="rounded-lg bg-slate-900 px-2.5 py-2 text-xs font-bold text-white disabled:opacity-50">{working === row.id ? "AI pracuje…" : `Otestovat stranu ${row.ai?.next_page ?? 1}`}</button> : null}
+              {row.latest_pdf ? <button type="button" disabled={working === row.id} onClick={() => void testPage(row)} className="rounded-lg bg-slate-900 px-2.5 py-2 text-xs font-bold text-white disabled:opacity-50">{working === row.id ? "OCR pracuje…" : `Otestovat stranu ${row.ai?.next_page ?? 1}`}</button> : null}
               <a href={row.learning.last_visit_url || row.source_url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-indigo-600 hover:underline">Kontrolovaný web ↗</a>
             </div>
           </article>
         ))}
       </div>
 
-      {review ? <div className="mt-6 rounded-2xl border-2 border-indigo-200 bg-indigo-50/40 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-bold text-slate-900">AI kontrola: {review.retailer} · strana {review.page}/{review.page_count}</h3><p className="text-sm text-slate-600">Bez zápisu do databáze. Bezpečné: {review.approved_count}, karanténa: {review.quarantine_count}.</p></div><div className="flex gap-2"><button type="button" onClick={() => setReview(null)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">Zahodit</button><button type="button" disabled={working === review.retailer} onClick={() => void approveReview()} className="rounded-xl bg-emerald-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">Schválit stránku a zapsat</button></div></div><div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-xs"><thead><tr className="border-b border-slate-200 text-slate-500"><th className="p-2">Stav</th><th className="p-2">Produkt</th><th className="p-2">Cena</th><th className="p-2">Původní</th><th className="p-2">Platnost</th><th className="p-2">Jistota</th><th className="p-2">Kontrola</th></tr></thead><tbody>{review.verified_offers.map((offer, index) => <tr key={index} className="border-b border-slate-100 align-top"><td className="p-2 font-bold">{offer.status}</td><td className="p-2">{offer.extracted_name ?? "—"}</td><td className="p-2">{offer.price_total ?? "—"}</td><td className="p-2">{offer.price_standard ?? "—"}</td><td className="p-2">{offer.valid_from ?? "—"} → {offer.valid_to ?? "—"}</td><td className="p-2">{offer.confidence == null ? "—" : `${Math.round(offer.confidence * 100)} %`}</td><td className="p-2">{offer.verification_reason ?? "OK"}</td></tr>)}</tbody></table></div></div> : null}
+      {review ? <div className="mt-6 rounded-2xl border-2 border-indigo-200 bg-indigo-50/40 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-bold text-slate-900">Kontrola OCR: {review.retailer} · strana {review.page}/{review.page_count}</h3><p className="text-sm text-slate-600">Vlevo vidíš skutečnou stránku PDF, vpravo to, co z ní systém přečetl. Bez zápisu do databáze. Bezpečné: {review.approved_count}, karanténa: {review.quarantine_count}.</p></div><div className="flex gap-2"><button type="button" onClick={() => setReview(null)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">Zahodit</button><button type="button" disabled={working === review.retailer} onClick={() => void approveReview()} className="rounded-xl bg-emerald-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">Schválit stránku a zapsat</button></div></div>
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2"><span className="text-xs font-bold text-slate-700">Originál · strana {review.page}</span><a href={previewUrl(review)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-indigo-600 hover:underline">Otevřít PDF ↗</a></div>
+            <iframe key={`${review.retailer}-${review.filename}-${review.page}`} title={`PDF ${review.retailer} strana ${review.page}`} src={previewUrl(review)} className="h-[720px] w-full bg-white" />
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white"><table className="min-w-full text-left text-xs"><thead><tr className="border-b border-slate-200 text-slate-500"><th className="p-2">Stav</th><th className="p-2">Produkt</th><th className="p-2">Cena</th><th className="p-2">Původní</th><th className="p-2">Platnost</th><th className="p-2">Jistota</th><th className="p-2">Kontrola</th></tr></thead><tbody>{review.verified_offers.map((offer, index) => <tr key={index} className="border-b border-slate-100 align-top"><td className="p-2 font-bold">{offer.status}</td><td className="p-2">{offer.extracted_name ?? "—"}</td><td className="p-2">{offer.price_total ?? "—"}</td><td className="p-2">{offer.price_standard ?? "—"}</td><td className="p-2">{offer.valid_from ?? "—"} → {offer.valid_to ?? "—"}</td><td className="p-2">{offer.confidence == null ? "—" : `${Math.round(offer.confidence * 100)} %`}</td><td className="p-2">{offer.verification_reason ?? "OK"}</td></tr>)}</tbody></table></div>
+        </div>
+      </div> : null}
     </section>
   );
 }
