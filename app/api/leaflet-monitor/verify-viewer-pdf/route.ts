@@ -25,7 +25,7 @@ async function verifyPdf(url: string) {
   const signature = new TextDecoder().decode(bytes.slice(0, 5));
   if (signature !== "%PDF-") throw new Error(`Odkaz nevrátil PDF: ${response.headers.get("content-type") || "unknown"}`);
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const task = pdfjs.getDocument({ data: bytes });
+  const task = pdfjs.getDocument({ data: bytes, disableWorker: true } as Parameters<typeof pdfjs.getDocument>[0]);
   const doc = await task.promise;
   try {
     return {
