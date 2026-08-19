@@ -183,39 +183,42 @@ function pennyPagePayload(text: string, identifier: string, pageNo: number) {
   return tail.replace(new RegExp(`^${pageNo}\\s+`), "").trim();
 }
 
-function allIndexes(haystack: string, needle: string) {
-  const out: number[] = [];
-  let from = 0;
-  while (needle && from < haystack.length) {
-    const at = haystack.indexOf(needle, from);
-    if (at < 0) break;
-    out.push(at);
-    from = at + Math.max(1, needle.length);
-  }
-  return out;
-}
-
 function isolatePennyFirstPage(rootText: string, page2Text: string, identifier: string) {
   const root = rootText.replace(/\s+/g, " ").trim();
-  const page2Payload = pennyPagePayload(page2Text, identifier, 2);
-  let cutAt = -1;
+  const payload = pennyPagePayload(page2Text, identifier, 2);
+  const candidates: number[] = [];
+  const windowSize = 72;
+  const maxOffset = Math.min(Math.max(0, payload.length - windowSize), 1800);
 
-  for (const size of [120, 90, 70, 50, 35]) {
-    if (page2Payload.length < size) continue;
-    const anchor = page2Payload.slice(0, size);
-    const hits = allIndexes(root, anchor);
-    if (!hits.length) continue;
-    const usable = hits.filter((at) => at > 500);
-    if (usable.length) {
-      cutAt = usable[0];
-      break;
+  for (let offset = 0; offset <= maxOffset; offset += 36) {
+    const window = payload.slice(offset, offset + windowSize);
+    if (window.length < windowSize) break;
+    const at = root.indexOf(window, 400);
+    if (at < 0) continue;
+    const boundary = at - offset;
+    if (boundary > 400) candidates.push(boundary);
+  }
+
+  if (candidates.length < 2) {
+    throw new Error(`Penny strana 1: zarovnání strany 2 nemá dost důkazů (${candidates.length}).`);
+  }
+
+  candidates.sort((a, b) => a - b);
+  let bestStart = candidates[0];
+  let bestCount = 0;
+  for (const candidate of candidates) {
+    const count = candidates.filter((x) => Math.abs(x - candidate) <= 8).length;
+    if (count > bestCount) {
+      bestCount = count;
+      bestStart = candidate;
     }
   }
-
-  if (cutAt < 0) {
-    throw new Error("Penny strana 1: nepodařilo se najít bezpečnou hranici začátku strany 2.");
+  if (bestCount < 2) {
+    throw new Error("Penny strana 1: nezávislá okna nepotvrdila stejnou hranici strany 2.");
   }
 
+  const cluster = candidates.filter((x) => Math.abs(x - bestStart) <= 8).sort((a, b) => a - b);
+  const cutAt = cluster[Math.floor(cluster.length / 2)];
   const isolated = root.slice(0, cutAt).trim();
   const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const navPrefix = new RegExp(`^${escaped}\\s+(?:\\d+\\s+)+${escaped}\\s*`, "i");
