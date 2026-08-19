@@ -23,9 +23,17 @@ async function refreshCounts(s:any,leafletId:string,pageCount:number,processedPa
 async function queueNotification(s:any,leaflet:any,counts:any){const subject=`${String(leaflet.retailer_id).toUpperCase()} – nový leták ke kontrole`;const waiting=counts.unreviewed_count+counts.quarantine_count;const body=`Na ${String(leaflet.retailer_id).toUpperCase()} je nový leták. Zpracováno ${leaflet.page_count} stran, nalezeno ${counts.candidate_count} položek, ${waiting} čeká na kontrolu.`;await s.from("leaflet_notification_outbox").upsert({leaflet_id:leaflet.id,subject,body_text:body,status:"pending"},{onConflict:"leaflet_id,channel"});await s.from("leaflet_documents").update({notification_status:"queued"}).eq("id",leaflet.id);return sendLeafletNotification(s,leaflet.id);}
 async function clearPageForReread(s:any,leafletId:string,pageNo:number){const{data}=await s.from("leaflet_item_candidates").select("id,status").eq("leaflet_id",leafletId).eq("page_no",pageNo);const removable=(data??[]).filter((r:any)=>!["approved","rejected"].includes(r.status)).map((r:any)=>r.id);if(removable.length){const{error}=await s.from("leaflet_item_candidates").delete().in("id",removable);if(error)throw new Error(`reread cleanup: ${error.message}`);}}
 
+async function loadPdfDocument(bytes:Uint8Array){
+ const worker=await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+ (globalThis as typeof globalThis & {pdfjsWorker?:unknown}).pdfjsWorker={WorkerMessageHandler:worker.WorkerMessageHandler};
+ const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
+ const task=pdfjs.getDocument({data:bytes.slice()});
+ return task.promise;
+}
+
 export async function processLeafletPdf(args:{supabase:any;bucket:string;path:string;retailer:string;sourceUrl:string|null;bytes?:Uint8Array;page?:number|null;force?:boolean}){
  const{suppabase,...unused}=({suppabase:null} as any);void unused;const s=args.supabase;let bytes=args.bytes;if(!bytes){const{data,error}=await s.storage.from(args.bucket).download(args.path);if(error||!data)throw new Error(error?.message||"PDF nebylo nalezeno.");bytes=new Uint8Array(await data.arrayBuffer());}
- const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");const task=pdfjs.getDocument({data:bytes});const doc=await task.promise;
+ const doc=await loadPdfDocument(bytes);
  try{
   const importId=await ensureImport(s,{bucket:args.bucket,path:args.path,retailer:args.retailer,sourceUrl:args.sourceUrl});let firstText="";for(let p=1;p<=Math.min(2,doc.numPages);p++)firstText+=(await pageWords(doc,p)).text+" ";const validity=parseValidity(firstText,args.path,args.sourceUrl);const filename=args.path.split("/").pop()||args.path;const internalKey=`${args.retailer}:${createHash("sha1").update(`${args.bucket}/${args.path}`).digest("hex")}`;
   const base={retailer_id:args.retailer,storage_bucket:args.bucket,storage_path:args.path,filename,source_url:args.sourceUrl,source_leaflet_number:null,internal_leaflet_key:internalKey,valid_from:validity.from,valid_to:validity.to,page_count:doc.numPages,processing_status:"processing",import_id:importId,processing_error:null,updated_at:new Date().toISOString()};const{data:leaflet,error:le}=await s.from("leaflet_documents").upsert(base,{onConflict:"storage_bucket,storage_path"}).select("*").single();if(le||!leaflet)throw new Error(le?.message||"Leaflet document nebyl uložen.");
