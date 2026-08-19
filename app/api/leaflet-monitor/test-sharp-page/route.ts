@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 const PAGE1 = "https://view.publitas.com/64069/2709538/pages/bad62f4b-9443-432c-839d-ee06ac3240c8-at1000.jpg";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const gate = await requireOperatorApi();
   if (!gate.ok) return gate.response;
   try {
@@ -15,6 +15,19 @@ export async function GET() {
     const bytes = Buffer.from(await res.arrayBuffer());
     const sharpMod = await import("sharp");
     const sharp = sharpMod.default;
+
+    if (request.nextUrl.searchParams.get("preview") === "1") {
+      const preview = await sharp(bytes).resize({ width: 520, withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+      return new NextResponse(new Uint8Array(preview), {
+        status: 200,
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Cache-Control": "no-store",
+          "Content-Length": String(preview.length),
+        },
+      });
+    }
+
     const image = sharp(bytes).greyscale();
     const meta = await image.metadata();
     const stats = await image.stats();
