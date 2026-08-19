@@ -33,6 +33,11 @@ export async function GET(req: NextRequest) {
       "Content-Disposition": `inline; filename="${safeName}"`,
       "Cache-Control": "private, no-store, max-age=0",
       "X-Content-Type-Options": "nosniff",
+      // The global security policy intentionally blocks framing. This endpoint is
+      // the one exception: the operator UI embeds the original leaflet PDF from
+      // the same origin next to the review controls.
+      "X-Frame-Options": "SAMEORIGIN",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'; sandbox allow-same-origin allow-scripts allow-forms allow-downloads",
     },
   });
 }
