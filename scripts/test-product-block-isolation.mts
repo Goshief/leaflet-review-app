@@ -16,19 +16,15 @@ try {
   await writeFile(tempTypes, await readFile(join(repo, "lib/ocr/types.ts"), "utf8"), "utf8");
   await writeFile(tempParse, await readFile(join(repo, "lib/ocr/price-parse.ts"), "utf8"), "utf8");
 
-  const typesUrl = pathToFileURL(tempTypes).href;
-  const parseUrl = pathToFileURL(tempParse).href;
-  const anchorsUrl = pathToFileURL(tempAnchors).href;
-
   const anchorsSource = (await readFile(join(repo, "lib/ocr/price-anchors.ts"), "utf8"))
-    .replace('"./types"', JSON.stringify(typesUrl))
-    .replace('"./price-parse"', JSON.stringify(parseUrl));
+    .replace(/from\s+["']\.\/types["']/g, 'from "./types.mts"')
+    .replace(/from\s+["']\.\/price-parse["']/g, 'from "./price-parse.mts"');
   await writeFile(tempAnchors, anchorsSource, "utf8");
 
   const extractorSource = (await readFile(join(repo, "lib/leaflet-review/extractor.ts"), "utf8"))
-    .replace('"@/lib/ocr/types"', JSON.stringify(typesUrl))
-    .replace('"@/lib/ocr/price-anchors"', JSON.stringify(anchorsUrl))
-    .replace('"@/lib/ocr/price-parse"', JSON.stringify(parseUrl));
+    .replace(/from\s+["']@\/lib\/ocr\/types["']/g, 'from "./types.mts"')
+    .replace(/from\s+["']@\/lib\/ocr\/price-anchors["']/g, 'from "./price-anchors.mts"')
+    .replace(/from\s+["']@\/lib\/ocr\/price-parse["']/g, 'from "./price-parse.mts"');
   await writeFile(tempExtractor, extractorSource, "utf8");
 
   const { extractLeafletCandidates, EXTRACTOR_VERSION } = await import(pathToFileURL(tempExtractor).href);
