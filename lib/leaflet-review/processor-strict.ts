@@ -1,5 +1,6 @@
 import { processLeafletPdf as processLeafletPdfLegacy } from "./processor";
 import { analyzePageCompletion } from "./page-state";
+import { claimLeafletPage, failLeafletPageClaim } from "./page-claim";
 import { sendLeafletNotification } from "./notify";
 
 async function getDocument(s: any, bucket: string, path: string) {
@@ -88,7 +89,14 @@ export async function processLeafletPdf(args: {
   for (const pageNo of pages) {
     // Page 1 of a new document was already processed during initialization.
     if (!args.force && lastResult && pageNo === 1) continue;
-    lastResult = await processLeafletPdfLegacy({ ...args, page: pageNo });
+    const claimed = await claimLeafletPage(s, String(document.id), pageNo, Boolean(args.force));
+    if (!claimed) continue;
+    try {
+      lastResult = await processLeafletPdfLegacy({ ...args, page: pageNo });
+    } catch (error) {
+      await failLeafletPageClaim(s, String(document.id), pageNo, error);
+      throw error;
+    }
   }
 
   document = await getDocument(s, args.bucket, args.path);
