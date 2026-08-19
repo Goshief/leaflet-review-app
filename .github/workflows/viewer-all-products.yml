@@ -1,0 +1,35 @@
+name: Viewer all products
+
+on:
+  push:
+    branches:
+      - fix/viewer-all-products
+  pull_request:
+    paths:
+      - "components/leaflet/monitor-panel.tsx"
+      - "lib/leaflet-monitor/viewer-candidates.ts"
+      - "lib/leaflet-monitor/viewer-processing.ts"
+      - "scripts/test-viewer-all-candidates.mts"
+      - "scripts/test-viewer-preview.mts"
+      - "scripts/test-viewer-processing-contract.mts"
+      - ".github/workflows/viewer-all-products.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: All viewer candidates
+        run: node --experimental-strip-types scripts/test-viewer-all-candidates.mts
+      - name: Viewer preview safety
+        run: node --experimental-strip-types scripts/test-viewer-preview.mts
+      - name: Viewer persistence contract
+        run: node --experimental-strip-types scripts/test-viewer-processing-contract.mts
+      - name: TypeScript compile check
+        run: npx tsc --noEmit
