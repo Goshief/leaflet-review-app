@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
-import { SECURITY_HEADERS } from "./lib/security/headers";
+import { PDF_VIEWER_HEADERS, SECURITY_HEADERS } from "./lib/security/headers";
 
 // Deployment checkpoint: security recovery and upload fix verified 2026-08-16.
 const nextConfig: NextConfig = {
@@ -21,6 +21,10 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: SECURITY_HEADERS.map(({ key, value }) => ({ key, value })),
+      },
+      {
+        source: "/api/leaflet-monitor/pdf",
+        headers: PDF_VIEWER_HEADERS.map(({ key, value }) => ({ key, value })),
       },
       {
         source: "/product-types/gallery",
