@@ -1,4 +1,5 @@
 import type { ExtractedCandidate } from "./extractor";
+import { applyVariantEvidence } from "./variant-resolver";
 
 export type BrandAlias = { alias: string; canonical_brand: string };
 
@@ -27,17 +28,18 @@ export function resolveCandidateBrand(candidate: ExtractedCandidate, aliases: Br
 }
 
 export function applyBrandAliases(candidate: ExtractedCandidate, aliases: BrandAlias[]): ExtractedCandidate {
-  const brand = resolveCandidateBrand(candidate, aliases);
-  if (!brand) return candidate;
+  const enriched = applyVariantEvidence(candidate);
+  const brand = resolveCandidateBrand(enriched, aliases);
+  if (!brand) return enriched;
   return {
-    ...candidate,
+    ...enriched,
     brand,
     field_evidence: {
-      ...candidate.field_evidence,
+      ...enriched.field_evidence,
       brand: { raw_text: brand, source: "brand_aliases" },
     },
     extraction_payload: {
-      ...candidate.extraction_payload,
+      ...enriched.extraction_payload,
       brand_resolution: { source: "brand_aliases", brand },
     },
   };
