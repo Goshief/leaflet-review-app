@@ -38,6 +38,13 @@ async function pageWords(doc: any, pageNo: number): Promise<OcrWord[]> {
   return words;
 }
 
+function region(words: OcrWord[], x0: number, x1: number, y0: number, y1: number) {
+  return words
+    .filter((w) => w.x + w.w / 2 >= x0 && w.x + w.w / 2 <= x1 && w.y + w.h / 2 >= y0 && w.y + w.h / 2 <= y1)
+    .sort((a, b) => b.y - a.y || a.x - b.x)
+    .map((w) => ({ text: w.text, x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10, w: Math.round(w.w * 10) / 10, h: Math.round(w.h * 10) / 10 }));
+}
+
 export async function GET() {
   const gate = await requireOperatorApi();
   if (!gate.ok) return gate.response;
@@ -51,23 +58,16 @@ export async function GET() {
     const bytes = new Uint8Array(await source.arrayBuffer());
     doc = await loadPdfDocument(bytes);
     const words = await pageWords(doc, 1);
-    const candidates = extractLeafletCandidates(words, {
-      pageNo: 1,
-      validFrom: "2026-08-19",
-      validTo: "2026-08-25",
-    });
+    const candidates = extractLeafletCandidates(words, { pageNo: 1, validFrom: "2026-08-19", validTo: "2026-08-25" });
 
     const genericMixed = candidates.filter((r) => {
       const text = String(r.source_text || "");
-      const names = Array.isArray(r.extraction_payload?.name_candidates)
-        ? (r.extraction_payload.name_candidates as unknown[])
-        : [];
+      const names = Array.isArray(r.extraction_payload?.name_candidates) ? (r.extraction_payload.name_candidates as unknown[]) : [];
       return names.length >= 4 || text.split(" | ").length >= 13;
     });
     const knownContamination = candidates.filter((r) => {
       const text = String(r.source_text || "");
-      return (/\bKuře\b/i.test(text) && /Anglická\s*\|?\s*slanina/i.test(text)) ||
-        (/\bPilsner\b/i.test(text) && /1\s*m\s*=\s*0,28/i.test(text));
+      return (/\bKuře\b/i.test(text) && /Anglická\s*\|?\s*slanina/i.test(text)) || (/\bPilsner\b/i.test(text) && /1\s*m\s*=\s*0,28/i.test(text));
     });
     const named = candidates.filter((r) => typeof r.product_name === "string" && r.product_name.trim());
     const quarantine = candidates.filter((r) => r.status === "quarantine");
@@ -83,6 +83,10 @@ export async function GET() {
       suspiciously_mixed: genericMixed.length,
       known_contamination: knownContamination.length,
       debug_words: debugWords,
+      debug_regions: {
+        kuře_49_90: region(words, 275, 440, 575, 710),
+        pilsner_99_90: region(words, 275, 445, 95, 230),
+      },
       candidates: candidates.map((r) => ({
         key: r.candidate_key,
         name: r.product_name,
