@@ -235,6 +235,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "approve") {
+      if (item.status === "approved" && item.approved_offer_id) {
+        return NextResponse.json({ ok: true, item, offer_id: item.approved_offer_id, already_approved: true });
+      }
       if (!item.product_name || item.price_sale == null) return NextResponse.json({ ok: false, error: "Nelze schválit: chybí jednoznačný název produktu nebo hlavní cena." }, { status: 409 });
       const validFrom = item.item_valid_from || item.leaflet_valid_from || doc?.valid_from || null;
       const validTo = item.item_valid_to || item.leaflet_valid_to || doc?.valid_to || null;
