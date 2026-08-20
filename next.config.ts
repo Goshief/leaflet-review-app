@@ -2,6 +2,18 @@ import type { NextConfig } from "next";
 import path from "node:path";
 import { SECURITY_HEADERS } from "./lib/security/headers";
 
+const TESSERACT_RUNTIME = [
+  "./node_modules/tesseract.js/**/*",
+  "./node_modules/tesseract.js-core/**/*",
+  "./node_modules/bmp-js/**/*",
+  "./node_modules/idb-keyval/**/*",
+  "./node_modules/is-electron/**/*",
+  "./node_modules/node-fetch/**/*",
+  "./node_modules/regenerator-runtime/**/*",
+  "./node_modules/wasm-feature-detect/**/*",
+  "./node_modules/zlibjs/**/*",
+];
+
 // Deployment checkpoint: security recovery and upload fix verified 2026-08-16.
 const nextConfig: NextConfig = {
   /**
@@ -47,18 +59,9 @@ const nextConfig: NextConfig = {
       "./node_modules/pdfjs-dist/standard_fonts/**/*",
       "./node_modules/pdfjs-dist/cmaps/**/*",
     ],
-    "/api/leaflet-monitor/test-schwarz-ocr-page": [
-      "./node_modules/tesseract.js/**/*",
-      "./node_modules/tesseract.js-core/**/*",
-    ],
-    "/api/ocr-lidl-page": [
-      "./node_modules/tesseract.js/**/*",
-      "./node_modules/tesseract.js-core/**/*",
-    ],
-    "/api/extract": [
-      "./node_modules/tesseract.js/**/*",
-      "./node_modules/tesseract.js-core/**/*",
-    ],
+    "/api/leaflet-monitor/test-schwarz-ocr-page": TESSERACT_RUNTIME,
+    "/api/ocr-lidl-page": TESSERACT_RUNTIME,
+    "/api/extract": TESSERACT_RUNTIME,
   },
   outputFileTracingExcludes: {
     "*": ["**/*.traineddata"],
