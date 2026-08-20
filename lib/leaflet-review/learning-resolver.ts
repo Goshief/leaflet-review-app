@@ -28,36 +28,45 @@ function jaccard(a: unknown, b: unknown) {
 }
 function same(a: unknown, b: unknown) { return JSON.stringify(a ?? null) === JSON.stringify(b ?? null); }
 
-export async function loadLearningSignals(s: any, retailerId: string): Promise<LearningSignal[]> {
+export async function loadLearningSignals(s: any): Promise<LearningSignal[]> {
   const { data, error } = await s.from("leaflet_item_review_audit")
     .select("id,previous_payload,next_payload,created_at")
     .eq("action","edited")
     .order("created_at",{ascending:false})
     .limit(500);
   if (error) throw new Error(`learning feedback lookup: ${error.message}`);
+  const rows=data ?? [];
+  const leafletIds=Array.from(new Set(rows.map((row:any)=>String((row.previous_payload??{}).leaflet_id ?? (row.next_payload??{}).leaflet_id ?? "")).filter(Boolean)));
+  const retailerByLeaflet=new Map<string,string>();
+  if(leafletIds.length){
+    const {data:docs,error:de}=await s.from("leaflet_documents").select("id,retailer_id").in("id",leafletIds);
+    if(de)throw new Error(`learning retailer lookup: ${de.message}`);
+    for(const d of docs??[]) retailerByLeaflet.set(String((d as any).id),String((d as any).retailer_id??"").toLowerCase());
+  }
   const out: LearningSignal[]=[];
-  for (const row of data ?? []) {
+  for (const row of rows) {
     const prev=(row as any).previous_payload ?? {};
     const next=(row as any).next_payload ?? {};
-    const meta=next?._learning ?? prev?._learning ?? {};
-    if (String(meta.retailer_id ?? "").toLowerCase() !== retailerId.toLowerCase()) continue;
-    const sourceText=String(meta.source_text ?? prev.source_text ?? next.source_text ?? "");
+    const leafletId=String(prev.leaflet_id ?? next.leaflet_id ?? "");
+    const retailerId=retailerByLeaflet.get(leafletId) ?? "";
+    if(!retailerId) continue;
+    const sourceText=String(prev.source_text ?? next.source_text ?? "");
     if (!sourceText.trim()) continue;
     const changed=LEARNABLE_FIELDS.filter(k=>!same(prev[k],next[k]));
     if (!changed.length) continue;
-    out.push({audit_id:String(row.id),retailer_id:retailerId,source_text:sourceText,previous:prev,corrected:next,changed_fields:changed,created_at:(row as any).created_at ?? null});
+    out.push({audit_id:String((row as any).id),retailer_id:retailerId,source_text:sourceText,previous:prev,corrected:next,changed_fields:changed,created_at:(row as any).created_at ?? null});
   }
   return out;
 }
 
-export function applyLearningSignal(candidate: ExtractedCandidate, signals: LearningSignal[]): ExtractedCandidate {
+export function applyLearningSignal(candidate: ExtractedCandidate, signals: LearningSignal[], retailerId?: string | null): ExtractedCandidate {
   const source=String(candidate.source_text ?? "");
   if (!source.trim()) return candidate;
   let best: { signal: LearningSignal; score: number } | null = null;
   for (const signal of signals) {
+    if(retailerId && signal.retailer_id!==String(retailerId).toLowerCase()) continue;
     const score=jaccard(source,signal.source_text);
     if (score < .90) continue;
-    // Additional guard: unchanged stable fields should still be compatible.
     const stablePrice = !signal.changed_fields.includes("price_sale") && signal.previous.price_sale != null && candidate.price_sale != null
       ? Math.abs(Number(signal.previous.price_sale)-Number(candidate.price_sale)) < .01 : true;
     const stableUnit = !signal.changed_fields.includes("pack_unit") && signal.previous.pack_unit && candidate.pack_unit
@@ -76,13 +85,14 @@ export function applyLearningSignal(candidate: ExtractedCandidate, signals: Lear
       learning_feedback:{
         source:"review_audit",
         audit_id:best.signal.audit_id,
+        retailer_id:best.signal.retailer_id,
         similarity:Number(best.score.toFixed(4)),
         changed_fields:best.signal.changed_fields,
       },
     },
     extraction_payload:{
       ...(candidate.extraction_payload ?? {}),
-      learning_feedback:{audit_id:best.signal.audit_id,similarity:Number(best.score.toFixed(4)),changed_fields:best.signal.changed_fields},
+      learning_feedback:{audit_id:best.signal.audit_id,retailer_id:best.signal.retailer_id,similarity:Number(best.score.toFixed(4)),changed_fields:best.signal.changed_fields},
     },
   } as ExtractedCandidate;
 }
