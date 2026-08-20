@@ -9,6 +9,7 @@ export const maxDuration = 120;
 
 const BUCKET = "leaflet-intake";
 const SOURCE_PATH = "billa/billa-2026-08-19__a7a0e1fef9b45d3b.pdf";
+const DEBUG_RE = /^(?:Kuře|Anglická|slanina|Pilsner|Urquell|Toaletní|papír|1 m|Milka|Čokoláda)$/i;
 
 async function loadPdfDocument(bytes: Uint8Array) {
   const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
@@ -56,15 +57,21 @@ export async function GET() {
       validTo: "2026-08-25",
     });
 
-    const mixed = candidates.filter((r) => {
+    const genericMixed = candidates.filter((r) => {
       const text = String(r.source_text || "");
       const names = Array.isArray(r.extraction_payload?.name_candidates)
         ? (r.extraction_payload.name_candidates as unknown[])
         : [];
       return names.length >= 4 || text.split(" | ").length >= 13;
     });
+    const knownContamination = candidates.filter((r) => {
+      const text = String(r.source_text || "");
+      return (/\bKuře\b/i.test(text) && /Anglická\s*\|?\s*slanina/i.test(text)) ||
+        (/\bPilsner\b/i.test(text) && /1\s*m\s*=\s*0,28/i.test(text));
+    });
     const named = candidates.filter((r) => typeof r.product_name === "string" && r.product_name.trim());
     const quarantine = candidates.filter((r) => r.status === "quarantine");
+    const debugWords = words.filter((w) => DEBUG_RE.test(w.text.trim())).map((w) => ({ text: w.text, x: w.x, y: w.y, w: w.w, h: w.h }));
 
     return NextResponse.json({
       ok: true,
@@ -73,7 +80,9 @@ export async function GET() {
       total: candidates.length,
       named: named.length,
       quarantine: quarantine.length,
-      suspiciously_mixed: mixed.length,
+      suspiciously_mixed: genericMixed.length,
+      known_contamination: knownContamination.length,
+      debug_words: debugWords,
       candidates: candidates.map((r) => ({
         key: r.candidate_key,
         name: r.product_name,
