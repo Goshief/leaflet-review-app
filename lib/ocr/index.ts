@@ -1,4 +1,5 @@
 export { extractWordsFromImageBuffer } from "./tesseract-extract";
+export { extractWordsFromLeafletImageBuffer } from "./tiled-extract";
 export { runOcrPipeline } from "./pipeline";
 export type { OcrPipelineResult } from "./pipeline";
 export type { OcrWord, BBox, PriceAnchor } from "./types";
