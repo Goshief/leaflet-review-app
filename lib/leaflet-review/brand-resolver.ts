@@ -1,7 +1,9 @@
 import type { ExtractedCandidate } from "./extractor";
 import { applyVariantEvidence } from "./variant-resolver";
+import { applyLearningSignal, loadLearningSignals, type LearningSignal } from "./learning-resolver";
 
 export type BrandAlias = { alias: string; canonical_brand: string };
+export type BrandAliasSet = BrandAlias[] & { learningSignals?: LearningSignal[] };
 
 function normalized(value: string | null | undefined) {
   return String(value ?? "").normalize("NFKC").toLocaleLowerCase("cs-CZ").replace(/\s+/g, " ").trim();
@@ -30,8 +32,7 @@ export function resolveCandidateBrand(candidate: ExtractedCandidate, aliases: Br
 export function applyBrandAliases(candidate: ExtractedCandidate, aliases: BrandAlias[]): ExtractedCandidate {
   const enriched = applyVariantEvidence(candidate);
   const brand = resolveCandidateBrand(enriched, aliases);
-  if (!brand) return enriched;
-  return {
+  const branded = brand ? {
     ...enriched,
     brand,
     field_evidence: {
@@ -42,11 +43,14 @@ export function applyBrandAliases(candidate: ExtractedCandidate, aliases: BrandA
       ...enriched.extraction_payload,
       brand_resolution: { source: "brand_aliases", brand },
     },
-  };
+  } as ExtractedCandidate : enriched;
+  return applyLearningSignal(branded, (aliases as BrandAliasSet).learningSignals ?? []);
 }
 
-export async function loadBrandAliases(supabase: any): Promise<BrandAlias[]> {
+export async function loadBrandAliases(supabase: any): Promise<BrandAliasSet> {
   const { data, error } = await supabase.from("brand_aliases").select("alias,canonical_brand");
   if (error) throw new Error(`brand_aliases: ${error.message}`);
-  return (data ?? []).filter((x: any) => typeof x.alias === "string" && typeof x.canonical_brand === "string");
+  const aliases = (data ?? []).filter((x: any) => typeof x.alias === "string" && typeof x.canonical_brand === "string") as BrandAliasSet;
+  aliases.learningSignals = await loadLearningSignals(supabase);
+  return aliases;
 }
