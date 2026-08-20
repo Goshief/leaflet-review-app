@@ -37,14 +37,27 @@ const nextConfig: NextConfig = {
   },
   outputFileTracingRoot: path.resolve(__dirname),
   serverExternalPackages: ["tesseract.js", "pdfjs-dist", "pg"],
-  // pdfjs-dist loads its worker dynamically on Node. Vercel tracing otherwise
-  // omits it from the serverless function and runtime falls back to a missing fake worker.
+  // pdfjs-dist and tesseract.js load worker/runtime files dynamically on Node.
+  // Vercel tracing cannot discover those relative runtime requires reliably,
+  // so include them explicitly in every serverless OCR route that uses them.
   outputFileTracingIncludes: {
     "/api/leaflet-ai/process": [
       "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
       "./node_modules/pdfjs-dist/legacy/build/pdf.mjs",
       "./node_modules/pdfjs-dist/standard_fonts/**/*",
       "./node_modules/pdfjs-dist/cmaps/**/*",
+    ],
+    "/api/leaflet-monitor/test-schwarz-ocr-page": [
+      "./node_modules/tesseract.js/**/*",
+      "./node_modules/tesseract.js-core/**/*",
+    ],
+    "/api/ocr-lidl-page": [
+      "./node_modules/tesseract.js/**/*",
+      "./node_modules/tesseract.js-core/**/*",
+    ],
+    "/api/extract": [
+      "./node_modules/tesseract.js/**/*",
+      "./node_modules/tesseract.js-core/**/*",
     ],
   },
   outputFileTracingExcludes: {
