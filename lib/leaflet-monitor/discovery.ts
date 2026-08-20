@@ -19,6 +19,9 @@ function decodeHtml(value: string) {
     .replace(/\\u0026/gi, "&")
     .replace(/\\\//g, "/");
 }
+function safeDecodeUri(value: string) {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
 
 function links(html: string, base: string) {
   const out: Array<{ url: string; label: string }> = [];
@@ -47,7 +50,7 @@ function dateScore(textValue: string, today: Date) {
   const y = today.getUTCFullYear();
   const m = today.getUTCMonth() + 1;
   const d = today.getUTCDate();
-  const text = decodeURIComponent(textValue).toLowerCase();
+  const text = safeDecodeUri(textValue).toLowerCase();
   let score = text.includes(String(y)) ? 5 : 0;
   const dd = String(d).padStart(2, "0");
   const mm = String(m).padStart(2, "0");
