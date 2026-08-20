@@ -9,6 +9,7 @@ type TesseractWorker = {
       }>;
     };
   }>;
+  setParameters(parameters: Record<string, string>): Promise<unknown>;
   terminate(): Promise<unknown>;
 };
 
@@ -18,7 +19,17 @@ let ocrTail: Promise<void> = Promise.resolve();
 async function getSharedWorker(): Promise<TesseractWorker> {
   if (!workerPromise) {
     workerPromise = import("tesseract.js")
-      .then(({ createWorker }) => createWorker("ces+eng") as Promise<TesseractWorker>)
+      .then(async ({ createWorker }) => {
+        const worker = (await createWorker("ces+eng")) as TesseractWorker;
+        await worker.setParameters({
+          // PSM 11 = sparse text. Letáky mají mnoho samostatných textových
+          // ostrůvků a cen, takže automatická "jedna stránka textu" segmentace
+          // zbytečně spojuje grafické prvky a ztrácí ceny.
+          tessedit_pageseg_mode: "11",
+          preserve_interword_spaces: "1",
+        });
+        return worker;
+      })
       .catch((error) => {
         workerPromise = null;
         throw error;
