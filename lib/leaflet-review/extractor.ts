@@ -2,7 +2,7 @@ import type { OcrWord } from "@/lib/ocr/types";
 import { clusterIntoLines, unionWordsBBox } from "@/lib/ocr/price-anchors";
 import { parsePriceText } from "@/lib/ocr/price-parse";
 
-export const EXTRACTOR_VERSION = "leaflet-layout-v9";
+export const EXTRACTOR_VERSION = "leaflet-layout-v10";
 
 export type ExtractedCandidate = {
   candidate_key: string;
@@ -125,6 +125,36 @@ function segmentProductBlocks(words:OcrWord[],anchors:Anchor[],medianH:number):P
   }).filter(b=>b.words.length);
 }
 
+function sideEvidenceScore(lines:Line[]):number{
+  let score=0;
+  for(const line of lines){const t=line.text;const clean=cleanNameText(t);
+    if(isNameText(clean))score+=2;
+    if(/-?\d+\s*%/.test(t))score+=6;
+    if(UNIT_PRICE_PREFIX.test(t))score+=4;
+    if(PACK_RE.test(t)&&!UNIT_PRICE_PREFIX.test(t))score+=3;
+    if(/\bcena za\b/i.test(t))score+=3;
+    if(/\b\d{1,3}[,.]\d{2}\//.test(t))score+=4;
+    if(/\b(?:běžná cena|původní cena|s klubem|bez klubu|s kartou|bez karty)\b/i.test(t))score+=3;
+  }
+  return score;
+}
+function isNearSecondary(line:Line,anchor:Anchor){
+  if(Math.abs(line.y-anchor.cy)>22)return false;
+  return /\b\d{1,3}[,.]\d{2}\//.test(line.text)||/\b(?:běžná cena|původní cena|bez klubu|s klubem|bez karty|s kartou)\b/i.test(line.text);
+}
+function trimToProductCore(lines:Line[],anchor:Anchor):Line[]{
+  const anchorLine=lines.find(l=>l.words.includes(anchor.word))??null;
+  const rest=lines.filter(l=>l!==anchorLine);
+  const above=rest.filter(l=>l.y>anchor.cy+4);
+  const below=rest.filter(l=>l.y<anchor.cy-4);
+  const near=rest.filter(l=>Math.abs(l.y-anchor.cy)<=4);
+  const aboveScore=sideEvidenceScore(above),belowScore=sideEvidenceScore(below);
+  const chosen=aboveScore>=belowScore?above:below;
+  const opposite=aboveScore>=belowScore?below:above;
+  const keep=[...(anchorLine?[anchorLine]:[]),...near,...chosen,...opposite.filter(l=>isNearSecondary(l,anchor))];
+  return [...new Set(keep)].sort((a,b)=>Math.abs(a.y-anchor.cy)-Math.abs(b.y-anchor.cy)).slice(0,10);
+}
+
 function lineXDistance(line:Line,anchor:Anchor){const b=line.bbox;if(!b)return 999;if(anchor.cx>=b.x0-8&&anchor.cx<=b.x1+8)return 0;return Math.min(Math.abs(anchor.cx-b.x0),Math.abs(anchor.cx-b.x1));}
 function chooseNameLines(lines:Line[],anchor:Anchor){
   const ranked=lines.filter(l=>!l.words.includes(anchor.word)).map(l=>({line:l,clean:cleanNameText(l.text),dy:Math.abs(l.y-anchor.cy),dx:lineXDistance(l,anchor)}))
@@ -143,9 +173,9 @@ export function extractLeafletCandidates(words:OcrWord[],meta:Meta):ExtractedCan
   if(!words.length)return[];const heights=words.map(w=>w.h).filter(h=>Number.isFinite(h)&&h>0).sort((a,b)=>a-b);const medianH=heights[Math.floor(heights.length/2)]||8;const minMainHeight=Math.max(18,medianH*2.05);const globalLines=lineObjects(words,medianH);
   const anchors:Anchor[]=[];for(const w of words){const value=strictPrice(w.text);if(value==null||w.h<minMainHeight)continue;const containing=globalLineForWord(globalLines,w);if(isSecondaryPriceLine(containing,w.text.trim()))continue;const p=center(w);anchors.push({word:w,value,raw:w.text.trim(),cx:p.x,cy:p.y});}
   const dedup=anchors.filter((a,i,all)=>!all.some((b,j)=>j<i&&Math.abs(a.cx-b.cx)<10&&Math.abs(a.cy-b.cy)<10&&Math.abs(a.value-b.value)<0.001));const blocks=segmentProductBlocks(words,dedup,medianH);const year=Number((meta.validTo||meta.validFrom||String(new Date().getFullYear())).slice(0,4))||new Date().getFullYear();const out:ExtractedCandidate[]=[];
-  for(const block of blocks){const a=block.anchor;const lines=block.lines;const nameChoice=chooseNameLines(lines,a);const cleanedNames=nameChoice.selected.map(l=>cleanNameText(l.text)).filter(isNameText);let productName=cleanedNames.join(" ").replace(/\s+/g," ").trim()||null;if(productName&&productName.length>100)productName=null;const nameBox=nameChoice.selected.length?publicBox(nameChoice.selected.flatMap(l=>l.words)):null;
+  for(const block of blocks){const a=block.anchor;const lines=trimToProductCore(block.lines,a);const coreWords=[...new Set(lines.flatMap(l=>l.words))];if(!coreWords.includes(a.word))coreWords.push(a.word);const nameChoice=chooseNameLines(lines,a);const cleanedNames=nameChoice.selected.map(l=>cleanNameText(l.text)).filter(isNameText);let productName=cleanedNames.join(" ").replace(/\s+/g," ").trim()||null;if(productName&&productName.length>100)productName=null;const nameBox=nameChoice.selected.length?publicBox(nameChoice.selected.flatMap(l=>l.words)):null;
     const standard=findExplicitPrice(lines,/běžná\s*cena|původní\s*cena/i);const loyalty=findExplicitPrice(lines,/klubová\s*cena|s\s+klubem|s\s+kartou/i);const without=findExplicitPrice(lines,/bez\s*klubu|bez\s*karty/i);const unit=findUnitPrice(lines);const source=lines.slice().sort((x,y)=>y.y-x.y).map(l=>l.text).join(" | ");const pack=source.match(PACK_RE);const qty=source.match(/při\s+koupi(?:\s+od)?\s+(\d+)\s*ks/i);const promo=source.match(/(při\s+koupi[^|]{0,80}|s\s+Klubem[^|]{0,70}|bez\s+Klubu[^|]{0,70})/i);const iv=itemValidity(source,year);const loyaltyRequired=/\bs\s+klubem\b|\bs\s+kartou\b/i.test(source)?true:null;
     const ambiguousName=!productName||nameChoice.ambiguous||MONEY_LIKE.test(productName)||BAD_NAME_FRAGMENT.test(productName)||DATE_TEXT.test(productName);const hasCore=!ambiguousName&&a.value!=null;const b=block.bounds;
-    out.push({candidate_key:`p${meta.pageNo}-v9-${block.blockIndex}-${Math.round(a.cx)}-${Math.round(a.cy)}`,page_no:meta.pageNo,source_bbox:publicBox(block.words),source_text:source||null,product_name:hasCore?productName:null,brand:null,variant:null,pack_qty:pack?1:null,pack_unit:pack?pack[2]!.toLowerCase():null,pack_unit_qty:pack?Number(pack[1]!.replace(",",".")):null,pack_text:pack?pack[0]:null,price_sale:a.value,price_standard:standard?.value??null,price_loyalty:loyalty?.value??null,price_without_loyalty:without?.value??null,price_per_unit:unit?.value??null,price_per_unit_unit:unit?.unit??null,leaflet_valid_from:meta.validFrom,leaflet_valid_to:meta.validTo,item_valid_from:iv.from,item_valid_to:iv.to,loyalty_required:loyaltyRequired,promo_label:null,promo_condition:promo?promo[1]!.trim():null,minimum_quantity:qty?Number(qty[1]):null,field_evidence:{product_name:hasCore?evidence(productName,nameBox):null,price_sale:evidence(a.raw,publicBox([a.word])),price_standard:standard?evidence(standard.raw,standard.bbox):null,price_loyalty:loyalty?evidence(loyalty.raw,loyalty.bbox):null,price_without_loyalty:without?evidence(without.raw,without.bbox):null,price_per_unit:unit?evidence(unit.raw,unit.bbox):null,pack_text:pack?evidence(pack[0],publicBox(block.words)):null},extraction_payload:{segmentation:"word-owner-v1",block_bounds:b,owned_word_count:block.words.length,owned_line_count:lines.length,main_price:{raw:a.raw,value:a.value,height:a.word.h,x:a.word.x,y:a.word.y},min_main_height:minMainHeight,lines:lines.map(l=>l.text),name_lines:cleanedNames,name_candidates:nameChoice.candidates,ambiguous_name:nameChoice.ambiguous},extractor_version:EXTRACTOR_VERSION,confidence:hasCore?0.64:0.1,status:hasCore?"unreviewed":"quarantine",review_reason:hasCore?"Produktový blok vznikl z OCR slov s jediným vlastníkem; sousední produkt nesmí sdílet stejné slovo. Automatické schválení je zakázané.":nameChoice.ambiguous?"V izolovaném produktovém bloku zůstává více konkurenčních názvů. Položka musí do ruční kontroly.":"V izolovaném produktovém bloku není název produktu jednoznačně doložen. Hodnota se nesmí domýšlet."});}
+    out.push({candidate_key:`p${meta.pageNo}-v10-${block.blockIndex}-${Math.round(a.cx)}-${Math.round(a.cy)}`,page_no:meta.pageNo,source_bbox:publicBox(coreWords),source_text:source||null,product_name:hasCore?productName:null,brand:null,variant:null,pack_qty:pack?1:null,pack_unit:pack?pack[2]!.toLowerCase():null,pack_unit_qty:pack?Number(pack[1]!.replace(",",".")):null,pack_text:pack?pack[0]:null,price_sale:a.value,price_standard:standard?.value??null,price_loyalty:loyalty?.value??null,price_without_loyalty:without?.value??null,price_per_unit:unit?.value??null,price_per_unit_unit:unit?.unit??null,leaflet_valid_from:meta.validFrom,leaflet_valid_to:meta.validTo,item_valid_from:iv.from,item_valid_to:iv.to,loyalty_required:loyaltyRequired,promo_label:null,promo_condition:promo?promo[1]!.trim():null,minimum_quantity:qty?Number(qty[1]):null,field_evidence:{product_name:hasCore?evidence(productName,nameBox):null,price_sale:evidence(a.raw,publicBox([a.word])),price_standard:standard?evidence(standard.raw,standard.bbox):null,price_loyalty:loyalty?evidence(loyalty.raw,loyalty.bbox):null,price_without_loyalty:without?evidence(without.raw,without.bbox):null,price_per_unit:unit?evidence(unit.raw,unit.bbox):null,pack_text:pack?evidence(pack[0],publicBox(coreWords)):null},extraction_payload:{segmentation:"word-owner-directional-v2",block_bounds:b,owned_word_count:coreWords.length,owned_line_count:lines.length,main_price:{raw:a.raw,value:a.value,height:a.word.h,x:a.word.x,y:a.word.y},min_main_height:minMainHeight,lines:lines.map(l=>l.text),name_lines:cleanedNames,name_candidates:nameChoice.candidates,ambiguous_name:nameChoice.ambiguous},extractor_version:EXTRACTOR_VERSION,confidence:hasCore?0.64:0.1,status:hasCore?"unreviewed":"quarantine",review_reason:hasCore?"Produktový blok byl po jednoznačném vlastnictví OCR slov ořezán na jednu produktovou stranu hlavní ceny. Automatické schválení je zakázané.":nameChoice.ambiguous?"V izolovaném produktovém bloku zůstává více konkurenčních názvů. Položka musí do ruční kontroly.":"V izolovaném produktovém bloku není název produktu jednoznačně doložen. Hodnota se nesmí domýšlet."});}
   return out;
 }
