@@ -25,6 +25,55 @@ function dedupeWords(words: OcrWord[]): OcrWord[] {
   return kept;
 }
 
+function numericText(text: string): string | null {
+  if (/%/.test(text)) return null;
+  const digits = text.replace(/[^0-9]/g, "");
+  return digits || null;
+}
+
+/**
+ * Lidl/Kaufland často tisknou celé koruny velkým písmem a haléře menším
+ * samostatným blokem napravo. OCR proto vrací např. `189` + `90` místo
+ * `189,90`. Podle geometrie vytvoříme navíc syntetický cenový token; původní
+ * slova zachováváme kvůli auditu a ostatním polím.
+ */
+function addSplitPriceWords(words: OcrWord[]): OcrWord[] {
+  const synthetic: OcrWord[] = [];
+  for (const major of words) {
+    const majorDigits = numericText(major.text);
+    if (!majorDigits || majorDigits.length < 1 || majorDigits.length > 3) continue;
+    if (major.h < 34) continue;
+
+    const majorCy = major.y + major.h / 2;
+    const candidates = words
+      .filter((minor) => minor !== major)
+      .map((minor) => ({ minor, digits: numericText(minor.text) }))
+      .filter(({ minor, digits }) => {
+        if (!digits || digits.length !== 2) return false;
+        if (minor.x <= major.x + major.w * 0.72) return false;
+        const gap = minor.x - (major.x + major.w);
+        if (gap > Math.max(70, major.h * 0.85)) return false;
+        if (gap < -Math.max(18, major.w * 0.12)) return false;
+        const minorCy = minor.y + minor.h / 2;
+        if (Math.abs(minorCy - majorCy) > Math.max(34, major.h * 0.35)) return false;
+        if (minor.h < major.h * 0.28 || minor.h > major.h * 1.05) return false;
+        return true;
+      })
+      .sort((a, b) => Math.abs(a.minor.x - (major.x + major.w)) - Math.abs(b.minor.x - (major.x + major.w)));
+
+    const match = candidates[0];
+    if (!match) continue;
+    const value = Number(`${majorDigits}.${match.digits}`);
+    if (!Number.isFinite(value) || value < 1 || value > 999.99) continue;
+    const x0 = Math.min(major.x, match.minor.x);
+    const y0 = Math.min(major.y, match.minor.y);
+    const x1 = Math.max(major.x + major.w, match.minor.x + match.minor.w);
+    const y1 = Math.max(major.y + major.h, match.minor.y + match.minor.h);
+    synthetic.push({ text: `${majorDigits},${match.digits}`, x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+  }
+  return dedupeWords([...words, ...synthetic]);
+}
+
 /**
  * OCR pro husté reklamní letáky. Celá stránka je pro Tesseract příliš
  * komplikovaná; menší překrývající se dlaždice výrazně omezí grafický šum.
@@ -80,5 +129,5 @@ export async function extractWordsFromLeafletImageBuffer(
     }
   }
 
-  return dedupeWords(out);
+  return addSplitPriceWords(dedupeWords(out));
 }
