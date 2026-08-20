@@ -2,7 +2,7 @@ import type { ExtractedCandidate } from "./extractor";
 
 const GENERIC_VARIANT = /^(?:(?:více|různé|různých|\d+)\s+druh(?:y|ů)|druhy|mix)$/i;
 const VERIFIED_DESCRIPTOR = /^(?:rané|vinné\s+bílé|ochucen(?:á|ý|é))$/i;
-const LABELED_VARIANT = /^(?:varianta|příchuť|odrůda|druh)\s*[:\-]?\s*(.+)$/i;
+const LABELED_VARIANT = /^(?:varianta|příchuť|odrůda|druh)\s*[:\-]\s*(.+)$/i;
 
 function clean(value:string){return value.replace(/\s+/g," ").trim();}
 function sourceParts(candidate:ExtractedCandidate){return String(candidate.source_text??"").split("|").map(clean).filter(Boolean);}
