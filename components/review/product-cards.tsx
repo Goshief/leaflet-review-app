@@ -103,13 +103,12 @@ export function ProductReviewCards(props: {
 
   const base = useMemo(
     () =>
-      // `visibleIndices` je source-of-truth pro render. Pokud je to prázdné pole,
-      // chceme opravdu zobrazit 0 položek (a ne fallback na všechny).
       (visibleIndices != null ? visibleIndices : offers.map((_, i) => i)).filter((i) => i >= 0 && i < offers.length),
     [offers, visibleIndices]
   );
 
   const [selected, setSelected] = useState<Record<number, true>>({});
+  const [expandedApproved, setExpandedApproved] = useState<Record<number, true>>({});
   const selectedIndices = useMemo(
     () =>
       Object.keys(selected)
@@ -138,12 +137,8 @@ export function ProductReviewCards(props: {
   if (!base.length)
     return (
       <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-[0_4px_24px_rgba(15,23,42,0.04)]">
-        <p className="text-slate-900 font-semibold">
-          Žádná položka neodpovídá aktuálním filtrům.
-        </p>
-        <p className="mt-2 text-sm text-slate-600">
-          Zkus změnit tab, zrušit focus na detail, nebo použít „Reset filtrů“.
-        </p>
+        <p className="text-slate-900 font-semibold">Žádná položka neodpovídá aktuálním filtrům.</p>
+        <p className="mt-2 text-sm text-slate-600">Zkus změnit tab, zrušit focus na detail, nebo použít „Reset filtrů“.</p>
       </div>
     );
 
@@ -152,85 +147,23 @@ export function ProductReviewCards(props: {
       {selectedIndices.length ? (
         <div className="sticky top-2 z-10 rounded-2xl border border-slate-200 bg-white/90 p-2 backdrop-blur">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-slate-700">
-              Vybráno: {selectedIndices.length}
-            </span>
-            <button
-              disabled={disabled}
-              onClick={() => bulk("approved")}
-              className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-            >
-              Schválit
-            </button>
-            <button
-              disabled={disabled}
-              onClick={() => bulk("rejected")}
-              className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 disabled:opacity-50"
-            >
-              Zamítnout
-            </button>
-            <button
-              disabled={disabled}
-              onClick={() => bulk("quarantine")}
-              className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-800 disabled:opacity-50"
-            >
-              Karanténa
-            </button>
-            <button
-              disabled={disabled}
-              onClick={() => (onRequestRowStatus ? onRequestRowStatus(selectedIndices, "quarantine") : bulk("quarantine"))}
-              className="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 disabled:opacity-50"
-              title="Nastaví stejný důvod karantény pro vybrané (a dá je do karantény)"
-            >
-              Nastavit důvod karantény
-            </button>
+            <span className="text-xs font-semibold text-slate-700">Vybráno: {selectedIndices.length}</span>
+            <button disabled={disabled} onClick={() => bulk("approved")} className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Schválit</button>
+            <button disabled={disabled} onClick={() => bulk("rejected")} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 disabled:opacity-50">Zamítnout</button>
+            <button disabled={disabled} onClick={() => bulk("quarantine")} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-800 disabled:opacity-50">Karanténa</button>
+            <button disabled={disabled} onClick={() => (onRequestRowStatus ? onRequestRowStatus(selectedIndices, "quarantine") : bulk("quarantine"))} className="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-800 disabled:opacity-50" title="Nastaví stejný důvod karantény pro vybrané (a dá je do karantény)">Nastavit důvod karantény</button>
             {onBulkSetCategory ? (
-              <button
-                disabled={disabled}
-                onClick={() => setBulkCategoryOpen((v) => !v)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
-                title="Nastaví stejnou kategorii pro vybrané položky"
-              >
-                Nastavit kategorii
-              </button>
+              <button disabled={disabled} onClick={() => setBulkCategoryOpen((v) => !v)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50" title="Nastaví stejnou kategorii pro vybrané položky">Nastavit kategorii</button>
             ) : null}
             {anySelectedNotPending ? (
-              <button
-                disabled={disabled}
-                onClick={() => bulk("pending")}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
-              >
-                Vrátit
-              </button>
+              <button disabled={disabled} onClick={() => bulk("pending")} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50">Vrátit</button>
             ) : null}
-            <button
-              disabled={disabled}
-              onClick={() => setSelected({})}
-              className="ml-auto text-xs font-semibold text-slate-600 hover:underline disabled:opacity-50"
-            >
-              Zrušit
-            </button>
+            <button disabled={disabled} onClick={() => setSelected({})} className="ml-auto text-xs font-semibold text-slate-600 hover:underline disabled:opacity-50">Zrušit</button>
           </div>
           {onBulkSetCategory && bulkCategoryOpen ? (
             <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
-                value={bulkCategory}
-                onChange={(e) => setBulkCategory(e.target.value)}
-                placeholder="např. maso, mléčné, ovoce… (prázdné = smazat)"
-                className="w-full flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20"
-              />
-              <button
-                disabled={disabled}
-                onClick={() => {
-                  const v = bulkCategory.trim();
-                  onBulkSetCategory(selectedIndices, v ? v : null);
-                  setBulkCategoryOpen(false);
-                  setBulkCategory("");
-                }}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                Použít na vybrané
-              </button>
+              <input value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} placeholder="např. maso, mléčné, ovoce… (prázdné = smazat)" className="w-full flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20" />
+              <button disabled={disabled} onClick={() => { const v = bulkCategory.trim(); onBulkSetCategory(selectedIndices, v ? v : null); setBulkCategoryOpen(false); setBulkCategory(""); }} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Použít na vybrané</button>
             </div>
           ) : null}
         </div>
@@ -238,13 +171,7 @@ export function ProductReviewCards(props: {
 
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold tracking-tight text-slate-900">Produkty na stránce</h2>
-        <button
-          disabled={disabled}
-          onClick={() => onApproveAll(base)}
-          className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-        >
-          Schválit vše v zobrazení
-        </button>
+        <button disabled={disabled} onClick={() => onApproveAll(base)} className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Schválit vše v zobrazení</button>
       </div>
 
       <ul className="space-y-2">
@@ -252,90 +179,56 @@ export function ProductReviewCards(props: {
           const o = offers[i]!;
           const s = rowStatus[i] ?? "pending";
           const r = rowReason?.[i];
+          const approvedCollapsed = s === "approved" && !expandedApproved[i];
+
+          if (approvedCollapsed) {
+            return (
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedApproved((prev) => ({ ...prev, [i]: true }))}
+                  className="flex w-full items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-left shadow-sm transition hover:bg-emerald-100"
+                  title="Kliknutím zobrazíš celý detail schválené položky"
+                >
+                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">✓</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-emerald-950">{o.extracted_name ?? "Schválená položka"}</span>
+                  <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">schváleno</span>
+                  <span className="shrink-0 text-xs text-emerald-700">Rozbalit</span>
+                </button>
+              </li>
+            );
+          }
+
           return (
-            <li key={i} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <li key={i} className={`rounded-2xl border p-4 ${s === "approved" ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"}`}>
               <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
                   disabled={disabled}
                   checked={!!selected[i]}
-                  onChange={(e) =>
-                    setSelected((prev) => {
-                      const next = { ...prev };
-                      if (e.target.checked) next[i] = true;
-                      else delete next[i];
-                      return next;
-                    })
-                  }
+                  onChange={(e) => setSelected((prev) => { const next = { ...prev }; if (e.target.checked) next[i] = true; else delete next[i]; return next; })}
                   className="mt-0.5 h-8 w-8 cursor-pointer rounded-lg border-2 border-slate-300 text-indigo-600 shadow-sm outline-none ring-0 transition focus-visible:border-indigo-400 focus-visible:ring-4 focus-visible:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9"
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-900">{o.extracted_name ?? "—"}</span>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
-                      {s}
-                    </span>
-                    {typeof o.page_no === "number" ? (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
-                        str. {o.page_no}
-                      </span>
-                    ) : null}
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${s === "approved" ? "bg-emerald-100 text-emerald-800 ring-emerald-200" : "bg-slate-100 text-slate-700 ring-slate-200"}`}>{s}</span>
+                    {typeof o.page_no === "number" ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">str. {o.page_no}</span> : null}
                   </div>
-                  {r && (s === "quarantine" || s === "rejected") ? (
-                    <p className="mt-1 text-xs text-slate-700">
-                      <strong>Důvod:</strong> {reasonLabel(r)}
-                    </p>
-                  ) : null}
+                  {r && (s === "quarantine" || s === "rejected") ? <p className="mt-1 text-xs text-slate-700"><strong>Důvod:</strong> {reasonLabel(r)}</p> : null}
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-semibold text-slate-900 tabular-nums">
-                    {o.price_total != null ? `${o.price_total} Kč` : "—"}
-                  </div>
+                  <div className="text-lg font-semibold text-slate-900 tabular-nums">{o.price_total != null ? `${o.price_total} Kč` : "—"}</div>
                 </div>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  disabled={disabled}
-                  onClick={() => onEdit(i)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
-                >
-                  Upravit
-                </button>
-                <button
-                  disabled={disabled}
-                  onClick={() => onRowStatus(i, "approved")}
-                  className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                >
-                  Schválit
-                </button>
-                {s !== "pending" ? (
-                  <button
-                    disabled={disabled}
-                    onClick={() => onRowStatus(i, "pending")}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
-                  >
-                    Vrátit
-                  </button>
-                ) : null}
-                <button
-                  disabled={disabled}
-                  onClick={() =>
-                    onRequestRowStatus ? onRequestRowStatus([i], "quarantine") : onRowStatus(i, "quarantine")
-                  }
-                  className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-800 disabled:opacity-50"
-                >
-                  Karanténa
-                </button>
-                <button
-                  disabled={disabled}
-                  onClick={() =>
-                    onRequestRowStatus ? onRequestRowStatus([i], "rejected") : onRowStatus(i, "rejected")
-                  }
-                  className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 disabled:opacity-50"
-                >
-                  Zamítnout
-                </button>
+                <button disabled={disabled} onClick={() => onEdit(i)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50">Upravit</button>
+                <button disabled={disabled} onClick={() => onRowStatus(i, "approved")} className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Schválit</button>
+                {s !== "pending" ? <button disabled={disabled} onClick={() => onRowStatus(i, "pending")} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50">Vrátit</button> : null}
+                <button disabled={disabled} onClick={() => onRequestRowStatus ? onRequestRowStatus([i], "quarantine") : onRowStatus(i, "quarantine")} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-800 disabled:opacity-50">Karanténa</button>
+                <button disabled={disabled} onClick={() => onRequestRowStatus ? onRequestRowStatus([i], "rejected") : onRowStatus(i, "rejected")} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 disabled:opacity-50">Zamítnout</button>
+                {s === "approved" ? <button type="button" onClick={() => setExpandedApproved((prev) => { const next = { ...prev }; delete next[i]; return next; })} className="ml-auto rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800">Sbalit schválené</button> : null}
               </div>
             </li>
           );
@@ -344,4 +237,3 @@ export function ProductReviewCards(props: {
     </div>
   );
 }
-
