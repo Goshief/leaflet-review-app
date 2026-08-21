@@ -14,8 +14,32 @@ export function resolvePromoEvidence(candidate:ExtractedCandidate,words:OcrWord[
  if(direct?.m){const n=Number(direct.m[1]);if(Number.isInteger(n)&&n>0&&n<100)return{minimum_quantity:n,raw:clean(direct.w.text),source:"nearby_product_block_text"};}
  return null;
 }
+
+/**
+ * A loyalty-only offer still has a real actionable price.  The review/approval
+ * pipeline historically required `price_sale`, which made perfectly valid
+ * Klub/card offers impossible to approve when the extractor stored only
+ * `price_loyalty`.  Preserve the loyalty fields, but expose that same evidenced
+ * amount as the primary sale price when no other sale price exists.
+ */
+function applyPrimaryPriceFallback(candidate:ExtractedCandidate):ExtractedCandidate{
+ if(candidate.price_sale!=null||candidate.price_loyalty==null)return candidate;
+ return{
+  ...candidate,
+  price_sale:candidate.price_loyalty,
+  field_evidence:{
+   ...candidate.field_evidence,
+   price_sale:{raw_text:String(candidate.price_loyalty),source:"loyalty_price_fallback"},
+  },
+  extraction_payload:{
+   ...candidate.extraction_payload,
+   primary_price_source:"price_loyalty",
+  },
+ };
+}
+
 export function applyPromoEvidence(candidate:ExtractedCandidate,words:OcrWord[]):ExtractedCandidate{
  const found=resolvePromoEvidence(candidate,words);
  const enriched=found?{...candidate,minimum_quantity:found.minimum_quantity,promo_condition:found.raw,field_evidence:{...candidate.field_evidence,promo_condition:{raw_text:found.raw,source:found.source}},extraction_payload:{...candidate.extraction_payload,promo_resolution:found}}:candidate;
- return applyCandidateQuality(enriched);
+ return applyCandidateQuality(applyPrimaryPriceFallback(enriched));
 }
