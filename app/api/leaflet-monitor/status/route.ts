@@ -7,11 +7,47 @@ import { RETAILERS } from "@/lib/leaflet-monitor/retailers";
 export const runtime = "nodejs";
 
 const BUCKET = "leaflet-intake";
+const MS_DAY = 86_400_000;
 
 async function readJson<T>(supabase: any, path: string): Promise<T | null> {
   const { data, error } = await supabase.storage.from(BUCKET).download(path);
   if (error || !data) return null;
   try { return JSON.parse(await data.text()) as T; } catch { return null; }
+}
+
+function weekdayPrague(date: Date): number {
+  const text = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Prague", weekday: "short" }).format(date);
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(text);
+}
+
+function nextFutureCheck(now: Date, weekdays: number[]): Date {
+  const wanted = weekdays.length ? weekdays : [1, 4];
+  for (let offset = 0; offset <= 8; offset++) {
+    const candidate = new Date(now.getTime() + offset * MS_DAY);
+    // 07:13 UTC = 09:13 Europe/Prague in summer, matching the existing schedule UI.
+    candidate.setUTCHours(7, 13, 0, 0);
+    if (candidate.getTime() <= now.getTime()) continue;
+    if (wanted.includes(weekdayPrague(candidate))) return candidate;
+  }
+  return new Date(now.getTime() + MS_DAY);
+}
+
+async function normalizeLearningSchedule(supabase: any, state: RetailerLearningState): Promise<RetailerLearningState> {
+  const now = new Date();
+  const current = state.next_check_at ? new Date(state.next_check_at) : null;
+  if (current && Number.isFinite(current.getTime()) && current.getTime() > now.getTime()) return state;
+
+  const fixed: RetailerLearningState = {
+    ...state,
+    next_check_at: nextFutureCheck(now, state.preferred_weekdays).toISOString(),
+    updated_at: now.toISOString(),
+  };
+  await supabase.storage.from(BUCKET).upload(
+    `_learning/${state.retailer}.json`,
+    new Blob([JSON.stringify(fixed, null, 2)], { type: "application/json" }),
+    { contentType: "application/json", upsert: true },
+  );
+  return fixed;
 }
 
 export async function GET() {
@@ -26,7 +62,8 @@ export async function GET() {
   // Intentionally serial: the old Promise.all fan-out generated many simultaneous
   // Storage DB requests and made an already saturated Supabase connection pool worse.
   for (const retailer of RETAILERS) {
-    const learning = await readJson<RetailerLearningState>(supabase, `_learning/${retailer.id}.json`) ?? emptyLearningState(retailer.id);
+    const rawLearning = await readJson<RetailerLearningState>(supabase, `_learning/${retailer.id}.json`) ?? emptyLearningState(retailer.id);
+    const learning = await normalizeLearningSchedule(supabase, rawLearning);
 
     const listResult = await supabase.storage.from(BUCKET).list(retailer.id, {
       limit: 100,
@@ -47,6 +84,7 @@ export async function GET() {
     if (checksResult.error) storageDegraded = true;
     const lastCheckName = checksResult.data?.[0]?.name ?? null;
     const lastCheck = lastCheckName ? await readJson<any>(supabase, `_checks/${lastCheckName}`) : null;
+    const totalDownloadHits = learning.weekday_download_hits.reduce((sum, value) => sum + Number(value || 0), 0);
 
     rows.push({
       ...retailer,
@@ -56,6 +94,7 @@ export async function GET() {
       learning: {
         confidence: learning.confidence,
         preferred_weekdays: learning.preferred_weekdays,
+        schedule_is_learned: totalDownloadHits >= 2,
         checks_this_week_limit: learning.max_checks_per_week,
         last_check_at: learning.last_check_at,
         last_visit_at: learning.last_visit_at ?? lastCheck?.checked_at ?? null,
