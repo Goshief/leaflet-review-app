@@ -39,8 +39,12 @@ export async function POST(req: NextRequest) {
   const supabase=getSupabaseAdmin();
   if(!supabase) return NextResponse.json({ok:false,error:"Supabase admin není nakonfigurovaný."},{status:503});
   try {
-    const result=await processLeafletPdf({supabase,bucket,path,retailer,sourceUrl:body.source_url??null,page:body.page??null,force:Boolean(body.force)});
-    return NextResponse.json({ok:true,model:"local-pdf-text-layout-v2",...result});
+    // This endpoint is the operator's explicit "Zpracovat celý leták" action.
+    // Re-running a completed leaflet must refresh stale parser fields, otherwise
+    // the UI appears to process while zero completed pages are actually touched.
+    const force = body.force !== false;
+    const result=await processLeafletPdf({supabase,bucket,path,retailer,sourceUrl:body.source_url??null,page:body.page??null,force});
+    return NextResponse.json({ok:true,model:"local-pdf-text-layout-v3",force,...result});
   } catch(error) {
     console.error("[leaflet-staging] processing failed",error);
     return NextResponse.json({ok:false,error:error instanceof Error?error.message:String(error)},{status:500});
