@@ -34,12 +34,19 @@ function nextFutureCheck(now: Date, weekdays: number[]): Date {
 
 async function normalizeLearningSchedule(supabase: any, state: RetailerLearningState): Promise<RetailerLearningState> {
   const now = new Date();
+  const wanted = state.preferred_weekdays.length ? state.preferred_weekdays : [1, 4];
   const current = state.next_check_at ? new Date(state.next_check_at) : null;
-  if (current && Number.isFinite(current.getTime()) && current.getTime() > now.getTime()) return state;
+  const currentIsValid = Boolean(
+    current &&
+    Number.isFinite(current.getTime()) &&
+    current.getTime() > now.getTime() &&
+    wanted.includes(weekdayPrague(current)),
+  );
+  if (currentIsValid) return state;
 
   const fixed: RetailerLearningState = {
     ...state,
-    next_check_at: nextFutureCheck(now, state.preferred_weekdays).toISOString(),
+    next_check_at: nextFutureCheck(now, wanted).toISOString(),
     updated_at: now.toISOString(),
   };
   await supabase.storage.from(BUCKET).upload(
