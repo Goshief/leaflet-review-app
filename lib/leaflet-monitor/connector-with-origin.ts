@@ -99,11 +99,20 @@ async function storePdf(supabase: any, path: string, bytes: Uint8Array) {
     cacheControl: "3600",
     upsert: false,
   });
-  if (!error || /already exists|duplicate|resource exists/i.test(error.message || "")) return;
+  if (!error || /already exists|duplicate|resource exists/i.test(error.message || "")) return { stored: true as const };
   if (!/maximum allowed size|exceeded|too large|payload too large/i.test(error.message || "")) {
     throw new Error(`Lidl PDF upload: ${error.message}`);
   }
-  await uploadResumable(path, bytes);
+  try {
+    await uploadResumable(path, bytes);
+    return { stored: true as const };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    if (/413|maximum size exceeded|too large|payload too large/i.test(message)) {
+      return { stored: false as const, reason: message };
+    }
+    throw cause;
+  }
 }
 
 async function recoverLidlPdf(supabase: any, assetUrl: string) {
@@ -130,10 +139,21 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
   if (existingError) throw new Error(`Lidl PDF lookup: ${existingError.message}`);
 
   let storagePath = existing?.storage_path ? String(existing.storage_path) : "";
+  let storageMode: "supabase" | "remote_pdf" = storagePath.includes("/remote-") ? "remote_pdf" : "supabase";
+  let storageWarning: string | null = null;
+
   if (!storagePath) {
     const filename = `lidl-${todayPrague()}__${shortSha}.pdf`;
-    storagePath = `lidl/${filename}`;
-    await storePdf(supabase, storagePath, bytes);
+    const wantedPath = `lidl/${filename}`;
+    const stored = await storePdf(supabase, wantedPath, bytes);
+    if (stored.stored) {
+      storagePath = wantedPath;
+      storageMode = "supabase";
+    } else {
+      storagePath = `lidl/remote-${shortSha}.pdf`;
+      storageMode = "remote_pdf";
+      storageWarning = stored.reason;
+    }
   }
 
   const alreadyReady = existing && ["ready_for_review", "partially_reviewed", "completed"].includes(String(existing.processing_status));
@@ -154,6 +174,8 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
     sha256,
     bytes: bytes.byteLength,
     storage_path: storagePath,
+    storage_mode: storageMode,
+    storage_warning: storageWarning,
     duplicate_prevented: Boolean(existing),
     processing,
   };
@@ -201,6 +223,7 @@ export async function runLeafletConnectorWithOrigin(req: Request, config: Connec
         pdf_url: (pdf_fallback as any).pdf_url,
         sha256: (pdf_fallback as any).sha256,
         storage_path: (pdf_fallback as any).storage_path,
+        storage_mode: (pdf_fallback as any).storage_mode,
         processing: (pdf_fallback as any).processing,
       } : {}),
       origin,
