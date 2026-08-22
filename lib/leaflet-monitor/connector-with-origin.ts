@@ -30,6 +30,14 @@ function todayPrague() {
   }).format(new Date());
 }
 
+function safeDecodeUri(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function normalized(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -118,7 +126,7 @@ async function storePdf(supabase: any, path: string, bytes: Uint8Array) {
 async function recoverLidlPdf(supabase: any, assetUrl: string) {
   const manifest = await resolveViewerPageManifest("lidl", assetUrl);
   const wanted = normalized(manifest.identifier);
-  const pdfUrl = manifest.pdf_urls.find((url) => normalized(decodeURIComponent(url)).includes(wanted)) ?? null;
+  const pdfUrl = manifest.pdf_urls.find((url) => normalized(safeDecodeUri(url)).includes(wanted)) ?? null;
   if (!pdfUrl) return null;
 
   const response = await fetch(pdfUrl, { cache: "no-store", redirect: "follow" });
