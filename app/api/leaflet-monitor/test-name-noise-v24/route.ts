@@ -34,6 +34,11 @@ export async function GET() {
       id: c.id,
       product_name: name || null,
       source_text: row?.source_text ?? null,
+      status: row?.status ?? null,
+      review_reason: row?.review_reason ?? null,
+      name_candidates: row?.extraction_payload?.name_candidates ?? null,
+      name_lines: row?.extraction_payload?.name_lines ?? null,
+      ambiguous_name: row?.extraction_payload?.ambiguous_name ?? null,
       ok: Boolean(name && name.toLocaleLowerCase("cs-CZ").includes(c.product.toLocaleLowerCase("cs-CZ")) && !name.toLocaleLowerCase("cs-CZ").includes(c.promo.toLocaleLowerCase("cs-CZ"))),
     };
   });
