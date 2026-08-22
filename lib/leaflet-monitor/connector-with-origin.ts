@@ -30,6 +30,14 @@ function todayPrague() {
   }).format(new Date());
 }
 
+function safeDecodeUri(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function normalized(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -115,10 +123,10 @@ async function storePdf(supabase: any, path: string, bytes: Uint8Array) {
   }
 }
 
-async function recoverLidlPdf(supabase: any, assetUrl: string) {
+async function recoverLidlPdf(supabase: any, assetUrl: string, force = false) {
   const manifest = await resolveViewerPageManifest("lidl", assetUrl);
   const wanted = normalized(manifest.identifier);
-  const pdfUrl = manifest.pdf_urls.find((url) => normalized(decodeURIComponent(url)).includes(wanted)) ?? null;
+  const pdfUrl = manifest.pdf_urls.find((url) => normalized(safeDecodeUri(url)).includes(wanted)) ?? null;
   if (!pdfUrl) return null;
 
   const response = await fetch(pdfUrl, { cache: "no-store", redirect: "follow" });
@@ -157,7 +165,7 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
   }
 
   const alreadyReady = existing && ["ready_for_review", "partially_reviewed", "completed"].includes(String(existing.processing_status));
-  const processing = alreadyReady
+  const processing = !force && alreadyReady
     ? existing
     : await processLeafletPdf({
         supabase,
@@ -166,7 +174,7 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
         retailer: "lidl",
         sourceUrl: pdfUrl,
         bytes,
-        force: false,
+        force,
       });
 
   return {
@@ -201,6 +209,8 @@ export async function runLeafletConnectorWithOrigin(req: Request, config: Connec
   }
 
   try {
+    const requestUrl = new URL(req.url);
+    const forceReprocess = requestUrl.searchParams.get("manual") === "1" && requestUrl.searchParams.get("reprocess") === "1";
     const origin = await captureCurrentLeafletOrigin(supabase, config.retailer);
     const assetUrl = typeof payload.asset_url === "string" ? payload.asset_url : origin.asset_url;
     if (!assetUrl && VIEWER_RETAILERS.has(config.retailer)) throw new Error("Viewer retailer nemá asset_url pro zpracování.");
@@ -209,7 +219,7 @@ export async function runLeafletConnectorWithOrigin(req: Request, config: Connec
     let page_processing: unknown = null;
 
     if (config.retailer === "lidl" && assetUrl) {
-      pdf_fallback = await recoverLidlPdf(supabase, assetUrl);
+      pdf_fallback = await recoverLidlPdf(supabase, assetUrl, forceReprocess);
     }
 
     if (VIEWER_RETAILERS.has(config.retailer) && assetUrl && !pdf_fallback) {
