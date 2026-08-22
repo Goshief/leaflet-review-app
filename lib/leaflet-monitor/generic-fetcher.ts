@@ -163,6 +163,17 @@ async function processIfNeeded(s: any, config: Config, path: string, bytes: Uint
   if (!force && (old?.processing_status === "completed" || old?.processing_status === "ready_for_review" || old?.processing_status === "partially_reviewed")) return old;
   return processLeafletPdf({ supabase: s, bucket: BUCKET, path, retailer: String(config.retailer), sourceUrl, bytes, force });
 }
+async function canonicalDocumentByHash(s:any,retailer:RetailerId,shortSha:string){
+  const {data,error}=await s.from("leaflet_documents")
+    .select("id,storage_path,filename,created_at,processing_status,approved_count")
+    .eq("retailer_id",retailer)
+    .ilike("filename",`%${shortSha}%`)
+    .order("created_at",{ascending:true})
+    .limit(1)
+    .maybeSingle();
+  if(error)throw new Error(`leaflet hash lookup: ${error.message}`);
+  return data??null;
+}
 
 export async function runGenericLeafletConnector(req: Request, config: Config) {
   const url = new URL(req.url);
@@ -228,10 +239,26 @@ export async function runGenericLeafletConnector(req: Request, config: Config) {
     const pdf = resolved.pdf;
     const bytesLength = pdf.bytes.byteLength;
     const sha256 = createHash("sha256").update(pdf.bytes).digest("hex");
+    const shortSha = sha256.slice(0, 16);
     const fingerprint = `pdf:${sha256}`;
     const claim = await claimAssetMarker(s, config.retailer, fingerprint, resolved.asset.url, checkedAt);
     claimedMarkerPath = claim.path;
     claimedMarkerIsNew = claim.isNew;
+
+    // SHA is the identity of a PDF leaflet. A date in the filename is only metadata.
+    // Always reuse the oldest canonical document so reviewed/approved work can never
+    // be split into a second document for the same PDF bytes.
+    const canonical=await canonicalDocumentByHash(s,config.retailer,shortSha);
+    if(canonical?.storage_path){
+      const storagePath=String(canonical.storage_path);
+      const processing=reprocess?await processIfNeeded(s,config,storagePath,pdf.bytes,pdf.url,true):canonical;
+      const payload={checked_at:checkedAt,visited_url:config.sourcePage,retailer:config.retailer,status:"unchanged" as const,manual,reprocess,duplicate_prevented:true,canonical_document_id:canonical.id,asset_url:resolved.asset.url,asset_fingerprint:fingerprint,viewer_url:pdf.viewer_url,pdf_url:pdf.url,sha256,storage_path:storagePath,processing};
+      await s.storage.from(BUCKET).upload(marker,new Blob([JSON.stringify(payload)],{type:"application/json"}),{contentType:"application/json",upsert:true});
+      const next=rememberAsset(recordObservation(learning,config.retailer,"unchanged",checkedAt,resolved.asset.url),fingerprint,resolved.asset.url,storagePath);
+      await writeLearning(s,next);
+      return NextResponse.json({ok:true,...payload,learning:next});
+    }
+
     if (!reprocess && !claim.isNew) {
       const payload = { checked_at: checkedAt, visited_url: config.sourcePage, retailer: config.retailer, status: "unchanged" as const, manual, asset_url: resolved.asset.url, asset_fingerprint: fingerprint, viewer_url: pdf.viewer_url, pdf_url: pdf.url, sha256, storage_path: learning?.last_storage_path ?? null };
       await s.storage.from(BUCKET).upload(marker, new Blob([JSON.stringify(payload)], { type: "application/json" }), { contentType: "application/json", upsert: true });
@@ -240,7 +267,6 @@ export async function runGenericLeafletConnector(req: Request, config: Config) {
       return NextResponse.json({ ok: true, ...payload, learning: next });
     }
 
-    const shortSha = sha256.slice(0, 16);
     const { data: existing } = await s.storage.from(BUCKET).list(String(config.retailer), { search: shortSha, limit: 20 });
     const found = (existing || []).find((x: any) => x.name?.includes(shortSha));
     if (found) {
