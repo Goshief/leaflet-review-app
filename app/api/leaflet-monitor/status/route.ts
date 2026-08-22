@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 const BUCKET = "leaflet-intake";
 const MS_DAY = 86_400_000;
+const DEFAULT_DAYS=[1,4];
 
 async function readJson<T>(supabase: any, path: string): Promise<T | null> {
   const { data, error } = await supabase.storage.from(BUCKET).download(path);
@@ -21,7 +22,7 @@ function weekdayPrague(date: Date): number {
 }
 
 function nextFutureCheck(now: Date, weekdays: number[]): Date {
-  const wanted = weekdays.length ? weekdays : [1, 4];
+  const wanted = weekdays.length ? weekdays : DEFAULT_DAYS;
   for (let offset = 0; offset <= 8; offset++) {
     const candidate = new Date(now.getTime() + offset * MS_DAY);
     candidate.setUTCHours(7, 13, 0, 0);
@@ -31,32 +32,43 @@ function nextFutureCheck(now: Date, weekdays: number[]): Date {
   return new Date(now.getTime() + MS_DAY);
 }
 
-async function normalizeLearningSchedule(supabase: any, state: RetailerLearningState): Promise<RetailerLearningState> {
-  const now = new Date();
-  const wanted = state.preferred_weekdays.length ? state.preferred_weekdays : [1, 4];
-  const current = state.next_check_at ? new Date(state.next_check_at) : null;
-  const currentIsValid = Boolean(
-    current &&
-    Number.isFinite(current.getTime()) &&
-    current.getTime() > now.getTime() &&
-    wanted.includes(weekdayPrague(current)),
-  );
-  if (currentIsValid) return state;
-
-  const fixed: RetailerLearningState = {
-    ...state,
-    next_check_at: nextFutureCheck(now, wanted).toISOString(),
-    updated_at: now.toISOString(),
-  };
+async function writeLearning(supabase:any,state:RetailerLearningState){
   await supabase.storage.from(BUCKET).upload(
     `_learning/${state.retailer}.json`,
-    new Blob([JSON.stringify(fixed, null, 2)], { type: "application/json" }),
-    { contentType: "application/json", upsert: true },
+    new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),
+    {contentType:"application/json",upsert:true},
   );
-  return fixed;
 }
 
 function pdfHash(name:string){return name.match(/__([a-f0-9]{16})\.pdf$/i)?.[1]?.toLowerCase()??null;}
+
+function repairedLearningFromDocuments(state:RetailerLearningState,docs:any[]):RetailerLearningState{
+  const firstByHash=new Map<string,Date>();
+  for(const d of docs){
+    const hash=pdfHash(String(d?.filename??""));
+    if(!hash||firstByHash.has(hash))continue;
+    const created=new Date(String(d?.created_at??""));
+    if(Number.isFinite(created.getTime()))firstByHash.set(hash,created);
+  }
+  const hits=[0,0,0,0,0,0,0];
+  const dates=[...firstByHash.values()].sort((a,b)=>a.getTime()-b.getTime());
+  for(const date of dates){const day=weekdayPrague(date);if(day>=0)hits[day]=(hits[day]??0)+1;}
+  const total=hits.reduce((a,b)=>a+b,0);
+  const ranked=hits.map((score,day)=>({score,day})).sort((a,b)=>b.score-a.score||a.day-b.day);
+  const preferred=total>=2?ranked.filter(x=>x.score>0).slice(0,2).map(x=>x.day):DEFAULT_DAYS;
+  const best=ranked[0]?.score??0;
+  const confidence=total===0?0:Math.min(1,best/Math.max(2,total));
+  const lastDownloaded=dates.length?dates[dates.length-1]!.toISOString():null;
+  return {
+    ...state,
+    weekday_download_hits:hits,
+    preferred_weekdays:preferred,
+    confidence,
+    last_downloaded_at:lastDownloaded,
+    next_check_at:nextFutureCheck(new Date(),preferred).toISOString(),
+    updated_at:new Date().toISOString(),
+  };
+}
 
 export async function GET() {
   const gate = await requireOperatorApi();
@@ -69,7 +81,6 @@ export async function GET() {
 
   for (const retailer of RETAILERS) {
     const rawLearning = await readJson<RetailerLearningState>(supabase, `_learning/${retailer.id}.json`) ?? emptyLearningState(retailer.id);
-    const learning = await normalizeLearningSchedule(supabase, rawLearning);
 
     const listResult = await supabase.storage.from(BUCKET).list(retailer.id, {
       limit: 100,
@@ -80,13 +91,20 @@ export async function GET() {
     const pdfs = files.filter((x: any) => x.name?.toLowerCase().endsWith(".pdf"));
     const states = files.filter((x: any) => x.name?.endsWith(".ai-state.json"));
 
-    // A PDF hash is the leaflet identity. If the same bytes were stored again under
-    // another date, expose only the oldest canonical document so review state is not split.
     const {data:docs,error:docsError}=await supabase.from("leaflet_documents")
       .select("filename,storage_path,created_at")
       .eq("retailer_id",retailer.id)
       .order("created_at",{ascending:true});
     if(docsError) storageDegraded=true;
+
+    // Rebuild schedule learning from first-seen unique PDF hashes. A manual reprocess
+    // of the same bytes must never teach a new weekday or move "last downloaded".
+    const learning=repairedLearningFromDocuments(rawLearning,docs??[]);
+    const changed=JSON.stringify({h:rawLearning.weekday_download_hits,p:rawLearning.preferred_weekdays,l:rawLearning.last_downloaded_at,n:rawLearning.next_check_at})!==JSON.stringify({h:learning.weekday_download_hits,p:learning.preferred_weekdays,l:learning.last_downloaded_at,n:learning.next_check_at});
+    if(changed)await writeLearning(supabase,learning);
+
+    // A PDF hash is the leaflet identity. If the same bytes were stored again under
+    // another date, expose only the oldest canonical document so review state is not split.
     const canonicalByHash=new Map<string,string>();
     for(const d of docs??[]){const name=String((d as any).filename??"");const hash=pdfHash(name);if(hash&&!canonicalByHash.has(hash))canonicalByHash.set(hash,name);}
     const uniquePdfs:Array<{name:string}>=[];
