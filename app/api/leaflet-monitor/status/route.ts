@@ -24,7 +24,6 @@ function nextFutureCheck(now: Date, weekdays: number[]): Date {
   const wanted = weekdays.length ? weekdays : [1, 4];
   for (let offset = 0; offset <= 8; offset++) {
     const candidate = new Date(now.getTime() + offset * MS_DAY);
-    // 07:13 UTC = 09:13 Europe/Prague in summer, matching the existing schedule UI.
     candidate.setUTCHours(7, 13, 0, 0);
     if (candidate.getTime() <= now.getTime()) continue;
     if (wanted.includes(weekdayPrague(candidate))) return candidate;
@@ -57,6 +56,8 @@ async function normalizeLearningSchedule(supabase: any, state: RetailerLearningS
   return fixed;
 }
 
+function pdfHash(name:string){return name.match(/__([a-f0-9]{16})\.pdf$/i)?.[1]?.toLowerCase()??null;}
+
 export async function GET() {
   const gate = await requireOperatorApi();
   if (!gate.ok) return gate.response;
@@ -66,8 +67,6 @@ export async function GET() {
   const rows: any[] = [];
   let storageDegraded = false;
 
-  // Intentionally serial: the old Promise.all fan-out generated many simultaneous
-  // Storage DB requests and made an already saturated Supabase connection pool worse.
   for (const retailer of RETAILERS) {
     const rawLearning = await readJson<RetailerLearningState>(supabase, `_learning/${retailer.id}.json`) ?? emptyLearningState(retailer.id);
     const learning = await normalizeLearningSchedule(supabase, rawLearning);
@@ -80,6 +79,27 @@ export async function GET() {
     const files = listResult.data ?? [];
     const pdfs = files.filter((x: any) => x.name?.toLowerCase().endsWith(".pdf"));
     const states = files.filter((x: any) => x.name?.endsWith(".ai-state.json"));
+
+    // A PDF hash is the leaflet identity. If the same bytes were stored again under
+    // another date, expose only the oldest canonical document so review state is not split.
+    const {data:docs,error:docsError}=await supabase.from("leaflet_documents")
+      .select("filename,storage_path,created_at")
+      .eq("retailer_id",retailer.id)
+      .order("created_at",{ascending:true});
+    if(docsError) storageDegraded=true;
+    const canonicalByHash=new Map<string,string>();
+    for(const d of docs??[]){const name=String((d as any).filename??"");const hash=pdfHash(name);if(hash&&!canonicalByHash.has(hash))canonicalByHash.set(hash,name);}
+    const uniquePdfs:Array<{name:string}>=[];
+    const seen=new Set<string>();
+    for(const p of pdfs){
+      const name=String((p as any).name??"");
+      const hash=pdfHash(name);
+      const key=hash?`sha:${hash}`:`name:${name.toLowerCase()}`;
+      if(seen.has(key))continue;
+      seen.add(key);
+      uniquePdfs.push({name:hash?(canonicalByHash.get(hash)??name):name});
+    }
+
     let aiState: any = null;
     if (states[0]?.name) aiState = await readJson<any>(supabase, `${retailer.id}/${states[0].name}`);
 
@@ -95,8 +115,8 @@ export async function GET() {
 
     rows.push({
       ...retailer,
-      pdf_count: pdfs.length,
-      latest_pdf: pdfs[0]?.name ?? null,
+      pdf_count: uniquePdfs.length,
+      latest_pdf: uniquePdfs[0]?.name ?? null,
       last_check: lastCheck,
       learning: {
         confidence: learning.confidence,
