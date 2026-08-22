@@ -17,6 +17,7 @@ type ConnectorConfig = {
 };
 
 const BUCKET = "leaflet-intake";
+const TUS_CHUNK = 6 * 1024 * 1024;
 const CAPTURE_STATUSES = new Set(["downloaded", "unchanged", "asset_found"]);
 const VIEWER_RETAILERS = new Set<RetailerId>(["lidl", "kaufland", "penny"]);
 
@@ -31,6 +32,78 @@ function todayPrague() {
 
 function normalized(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function b64(value: string) {
+  return Buffer.from(value, "utf8").toString("base64");
+}
+
+async function uploadResumable(path: string, bytes: Uint8Array) {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!base || !key) throw new Error("Supabase TUS není nakonfigurovaný.");
+
+  const create = await fetch(`${base}/storage/v1/upload/resumable`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${key}`,
+      "tus-resumable": "1.0.0",
+      "upload-length": String(bytes.byteLength),
+      "upload-metadata": [
+        `bucketName ${b64(BUCKET)}`,
+        `objectName ${b64(path)}`,
+        `contentType ${b64("application/pdf")}`,
+        `cacheControl ${b64("3600")}`,
+      ].join(","),
+      "x-upsert": "false",
+    },
+  });
+  if (!create.ok) throw new Error(`Supabase TUS create ${create.status}: ${(await create.text()).slice(0, 300)}`);
+  const location = create.headers.get("location");
+  if (!location) throw new Error("Supabase TUS nevrátil Location.");
+  const uploadUrl = new URL(location, base).toString();
+
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const end = Math.min(bytes.byteLength, offset + TUS_CHUNK);
+    const chunk = bytes.slice(offset, end);
+    let lastError = "";
+    let advanced = false;
+    for (let attempt = 0; attempt < 3 && !advanced; attempt++) {
+      const patch = await fetch(uploadUrl, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${key}`,
+          "tus-resumable": "1.0.0",
+          "upload-offset": String(offset),
+          "content-type": "application/offset+octet-stream",
+        },
+        body: chunk,
+      });
+      if (patch.ok) {
+        const next = Number(patch.headers.get("upload-offset") ?? end);
+        offset = Number.isFinite(next) && next > offset ? next : end;
+        advanced = true;
+        break;
+      }
+      lastError = `${patch.status}: ${(await patch.text()).slice(0, 300)}`;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+    if (!advanced) throw new Error(`Supabase TUS chunk ${offset}: ${lastError}`);
+  }
+}
+
+async function storePdf(supabase: any, path: string, bytes: Uint8Array) {
+  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes, {
+    contentType: "application/pdf",
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (!error || /already exists|duplicate|resource exists/i.test(error.message || "")) return;
+  if (!/maximum allowed size|exceeded|too large|payload too large/i.test(error.message || "")) {
+    throw new Error(`Lidl PDF upload: ${error.message}`);
+  }
+  await uploadResumable(path, bytes);
 }
 
 async function recoverLidlPdf(supabase: any, assetUrl: string) {
@@ -60,14 +133,7 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
   if (!storagePath) {
     const filename = `lidl-${todayPrague()}__${shortSha}.pdf`;
     storagePath = `lidl/${filename}`;
-    const { error } = await supabase.storage.from(BUCKET).upload(storagePath, bytes, {
-      contentType: "application/pdf",
-      cacheControl: "3600",
-      upsert: false,
-    });
-    if (error && !/already exists|duplicate|resource exists/i.test(error.message || "")) {
-      throw new Error(`Lidl PDF upload: ${error.message}`);
-    }
+    await storePdf(supabase, storagePath, bytes);
   }
 
   const alreadyReady = existing && ["ready_for_review", "partially_reviewed", "completed"].includes(String(existing.processing_status));
@@ -86,6 +152,7 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
   return {
     pdf_url: pdfUrl,
     sha256,
+    bytes: bytes.byteLength,
     storage_path: storagePath,
     duplicate_prevented: Boolean(existing),
     processing,
@@ -123,8 +190,6 @@ export async function runLeafletConnectorWithOrigin(req: Request, config: Connec
       pdf_fallback = await recoverLidlPdf(supabase, assetUrl);
     }
 
-    // Viewer ingestion remains useful as evidence/fallback. If Lidl has a direct
-    // matching Schwarz PDF, the PDF pipeline is authoritative for product review.
     if (VIEWER_RETAILERS.has(config.retailer) && assetUrl && !pdf_fallback) {
       page_processing = await ingestViewerPages(supabase, config.retailer, assetUrl);
     }
