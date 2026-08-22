@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireOperatorApi } from "@/lib/auth/guards";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { OcrWord } from "@/lib/ocr/types";
+import { extractLeafletCandidates } from "@/lib/leaflet-review/extractor";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -39,7 +40,9 @@ export async function GET() {
     const anchor = words.find((w) => /^449,90\/?$/.test(w.text.trim()));
     const around = anchor ? words.filter((w) => Math.abs((w.x + w.w / 2) - (anchor.x + anchor.w / 2)) <= 130 && Math.abs((w.y + w.h / 2) - (anchor.y + anchor.h / 2)) <= 120) : [];
     const compact = (w: OcrWord) => ({ text: w.text, x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10, w: Math.round(w.w * 10) / 10, h: Math.round(w.h * 10) / 10 });
-    return NextResponse.json({ ok: true, focus: focus.map(compact), around: around.sort((a,b)=>b.y-a.y||a.x-b.x).map(compact) });
+    const candidates = extractLeafletCandidates(words, { pageNo: 2, validFrom: "2026-08-19", validTo: "2026-08-25" });
+    const ownership = candidates.map((c) => ({ key: c.candidate_key, price: c.price_sale, name: c.product_name, source: c.source_text, bounds: c.extraction_payload?.block_bounds, name_candidates: c.extraction_payload?.name_candidates })).filter((c) => /Sheba|Kapsičky|kočky/i.test(String(c.source)) || c.price === 449.9);
+    return NextResponse.json({ ok: true, focus: focus.map(compact), around: around.sort((a,b)=>b.y-a.y||a.x-b.x).map(compact), ownership, all: candidates.map((c)=>({price:c.price_sale,name:c.product_name,source:c.source_text})) });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   } finally {
