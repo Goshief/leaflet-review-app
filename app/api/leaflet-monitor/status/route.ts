@@ -40,7 +40,11 @@ async function writeLearning(supabase:any,state:RetailerLearningState){
   );
 }
 
-function pdfHash(name:string){return name.match(/__([a-f0-9]{16})\.pdf$/i)?.[1]?.toLowerCase()??null;}
+function pdfHash(name:string){
+  return name.match(/__([a-f0-9]{16})\.pdf$/i)?.[1]?.toLowerCase()
+    ?? name.match(/remote-([a-f0-9]{16})\.pdf$/i)?.[1]?.toLowerCase()
+    ?? null;
+}
 
 function repairedLearningFromDocuments(state:RetailerLearningState,docs:any[]):RetailerLearningState{
   const firstByHash=new Map<string,Date>();
@@ -92,19 +96,15 @@ export async function GET() {
     const states = files.filter((x: any) => x.name?.endsWith(".ai-state.json"));
 
     const {data:docs,error:docsError}=await supabase.from("leaflet_documents")
-      .select("filename,storage_path,created_at")
+      .select("filename,storage_path,created_at,page_count,processed_pages,candidate_count,processing_status")
       .eq("retailer_id",retailer.id)
       .order("created_at",{ascending:true});
     if(docsError) storageDegraded=true;
 
-    // Rebuild schedule learning from first-seen unique PDF hashes. A manual reprocess
-    // of the same bytes must never teach a new weekday or move "last downloaded".
     const learning=repairedLearningFromDocuments(rawLearning,docs??[]);
     const changed=JSON.stringify({h:rawLearning.weekday_download_hits,p:rawLearning.preferred_weekdays,l:rawLearning.last_downloaded_at,n:rawLearning.next_check_at})!==JSON.stringify({h:learning.weekday_download_hits,p:learning.preferred_weekdays,l:learning.last_downloaded_at,n:learning.next_check_at});
     if(changed)await writeLearning(supabase,learning);
 
-    // A PDF hash is the leaflet identity. If the same bytes were stored again under
-    // another date, expose only the oldest canonical document so review state is not split.
     const canonicalByHash=new Map<string,string>();
     for(const d of docs??[]){const name=String((d as any).filename??"");const hash=pdfHash(name);if(hash&&!canonicalByHash.has(hash))canonicalByHash.set(hash,name);}
     const uniquePdfs:Array<{name:string}>=[];
@@ -118,6 +118,15 @@ export async function GET() {
       uniquePdfs.push({name:hash?(canonicalByHash.get(hash)??name):name});
     }
 
+    const uniqueDocuments=new Map<string,any>();
+    for(const d of docs??[]){
+      const name=String((d as any).filename??"");
+      const hash=pdfHash(name);
+      const key=hash?`sha:${hash}`:`path:${String((d as any).storage_path??name).toLowerCase()}`;
+      if(!uniqueDocuments.has(key))uniqueDocuments.set(key,d);
+    }
+    const latestDoc=(docs??[]).length?(docs??[])[(docs??[]).length-1]:null;
+
     let aiState: any = null;
     if (states[0]?.name) aiState = await readJson<any>(supabase, `${retailer.id}/${states[0].name}`);
 
@@ -130,10 +139,16 @@ export async function GET() {
     const lastCheckName = checksResult.data?.[0]?.name ?? null;
     const lastCheck = lastCheckName ? await readJson<any>(supabase, `_checks/${lastCheckName}`) : null;
     const totalDownloadHits = learning.weekday_download_hits.reduce((sum, value) => sum + Number(value || 0), 0);
+    const documentAi = latestDoc ? {
+      page_count: latestDoc.page_count ?? null,
+      processed_pages: Number(latestDoc.processed_pages ?? 0),
+      completed: ["ready_for_review","partially_reviewed","completed"].includes(String(latestDoc.processing_status ?? "")),
+      next_page: Number(latestDoc.processed_pages ?? 0) < Number(latestDoc.page_count ?? 0) ? Number(latestDoc.processed_pages ?? 0) + 1 : null,
+    } : null;
 
     rows.push({
       ...retailer,
-      pdf_count: uniquePdfs.length,
+      pdf_count: Math.max(uniquePdfs.length, uniqueDocuments.size),
       latest_pdf: uniquePdfs[0]?.name ?? null,
       last_check: lastCheck,
       learning: {
@@ -153,7 +168,7 @@ export async function GET() {
         processed_pages: Array.isArray(aiState.processed_pages) ? aiState.processed_pages.length : 0,
         completed: Boolean(aiState.completed),
         next_page: aiState.next_page ?? null,
-      } : null,
+      } : documentAi,
     });
   }
 
