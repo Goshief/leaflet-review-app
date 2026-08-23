@@ -48,7 +48,7 @@ export async function GET() {
     const bySource = (price: number, rx: RegExp) => at(price).find((r) => rx.test(String(r.source_text || "")) || rx.test(String(r.product_name || "")));
     const value = (price: number, rx: RegExp) => bySource(price, rx);
     const checks = [
-      { id: "eidam", row: value(14.9, /Eidam/i), name: /Eidam/i },
+      { id: "eidam", row: value(14.9, /Eidam/i), name: /^Sýr Eidam Plátky$/i },
       { id: "lucina", row: value(42.9, /Lučina|Svěží/i), name: /Lučina|Svěží/i },
       { id: "merci", row: value(199.9, /Merci/i), name: /Merci/i },
       { id: "znojmia", row: value(39.9, /Znojmia|Okurky/i), name: /Znojmia|Okurky/i },
@@ -57,7 +57,7 @@ export async function GET() {
       { id: "radegast", row: value(19.9, /Radegast|Ryze|hořká/i), name: /Radegast/i },
       { id: "st_nicolaus", row: value(129.9, /Nicolaus|vodka/i), name: /Nicolaus/i },
       { id: "sheba", row: value(449.9, /Kapsičky pro kočky/i), name: /Kapsičky pro kočky/i },
-      { id: "burrata", row: value(29.9, /Burrata|BILLA Premium/i), name: /Burrata/i },
+      { id: "burrata", row: value(29.9, /Burrata|BILLA Premium/i), name: /^Burrata$/i },
     ].map((c) => ({
       id: c.id,
       value: c.row ? { product_name: c.row.product_name, pack_text: c.row.pack_text, price_sale: c.row.price_sale, source_text: c.row.source_text } : null,
