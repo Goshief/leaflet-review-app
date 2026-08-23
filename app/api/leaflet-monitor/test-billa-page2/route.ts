@@ -56,7 +56,7 @@ export async function GET() {
       { id: "drwitt", row: value(16.9, /DrWitt/i), name: /DrWitt/i },
       { id: "radegast", row: value(19.9, /Radegast|Ryze|hořká/i), name: /Radegast/i },
       { id: "st_nicolaus", row: value(129.9, /Nicolaus|vodka/i), name: /Nicolaus/i },
-      { id: "sheba", row: value(449.9, /Sheba|Kapsičky/i), name: /Sheba/i },
+      { id: "sheba", row: value(449.9, /Kapsičky pro kočky/i), name: /Kapsičky pro kočky/i },
       { id: "burrata", row: value(29.9, /Burrata|BILLA Premium/i), name: /Burrata/i },
     ].map((c) => ({
       id: c.id,
