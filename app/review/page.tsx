@@ -636,6 +636,14 @@ export default function ReviewPage() {
   }, [kind, file]);
 
   useEffect(() => {
+    const raw = sessionStorage.getItem("letak-page");
+    if (!raw) return;
+    const n = Number(raw);
+    sessionStorage.removeItem("letak-page");
+    if (Number.isFinite(n) && n >= 1) setPageNo(Math.floor(n));
+  }, []);
+
+  useEffect(() => {
     if (kind !== "pdf" || !file || !pdfPageCount) {
       setPdfPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);

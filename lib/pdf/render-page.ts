@@ -62,3 +62,38 @@ export async function renderPdfPageToPngFile(
     type: "image/png",
   });
 }
+
+type PdfDocument = {
+  numPages: number;
+  getPage: (n: number) => Promise<{
+    getViewport: (opts: { scale: number }) => { width: number; height: number };
+    render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => { promise: Promise<void> };
+  }>;
+};
+
+export async function loadPdfDocument(file: File): Promise<PdfDocument> {
+  const pdfjs = await getPdfjs();
+  const data = await file.arrayBuffer();
+  return pdfjs.getDocument({ data }).promise as Promise<PdfDocument>;
+}
+
+export async function renderLoadedPdfPage(
+  pdf: PdfDocument,
+  pageNumber1Based: number,
+  scale: number
+): Promise<Blob> {
+  if (pageNumber1Based < 1 || pageNumber1Based > pdf.numPages) {
+    throw new Error(`Stránka ${pageNumber1Based} není v rozsahu 1–${pdf.numPages}.`);
+  }
+  const page = await pdf.getPage(pageNumber1Based);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Nelze vytvořit 2D kontext canvasu.");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("canvas.toBlob selhal"))), "image/jpeg", 0.82);
+  });
+}

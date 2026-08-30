@@ -56,6 +56,7 @@ export const PAGE_ACCESS_MATRIX: PageAccessRule[] = [
   },
   { path: "/settings", access: "admin", guardModule: "app/settings/layout.tsx" },
   { path: "/catalog", access: "operator", guardModule: "app/catalog/layout.tsx" },
+  { path: "/letak", access: "operator", guardModule: "app/letak/layout.tsx" },
 ];
 
 export const API_ACCESS_MATRIX: ApiAccessRule[] = [
