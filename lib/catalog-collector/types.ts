@@ -1,4 +1,4 @@
-export type CatalogRetailerId = "billa";
+export type CatalogRetailerId = "billa" | "teta";
 
 export type CatalogOffer = {
   price: number | null;
