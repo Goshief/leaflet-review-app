@@ -7,6 +7,7 @@
     { "path": "/api/cron/fetch-penny-leaflet", "schedule": "23 7 * * *" },
     { "path": "/api/cron/fetch-billa-leaflet", "schedule": "29 7 * * *" },
     { "path": "/api/cron/send-leaflet-notifications", "schedule": "45 7 * * *" },
-    { "path": "/api/cron/fetch-billa-products", "schedule": "11 8 * * *" }
+    { "path": "/api/cron/fetch-billa-products", "schedule": "11 8 * * *" },
+    { "path": "/api/cron/fetch-teta-products", "schedule": "19 8 * * *" }
   ]
 }
