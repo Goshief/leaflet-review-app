@@ -9,6 +9,9 @@
     { "path": "/api/cron/send-leaflet-notifications", "schedule": "45 7 * * *" },
     { "path": "/api/cron/fetch-billa-products", "schedule": "11 8 * * *" },
     { "path": "/api/cron/fetch-teta-products", "schedule": "19 8 * * *" },
-    { "path": "/api/cron/fetch-dm-products", "schedule": "27 8 * * *" }
+    { "path": "/api/cron/fetch-dm-products", "schedule": "27 8 * * *" },
+    { "path": "/api/cron/fetch-lidl-products", "schedule": "35 8 * * *" },
+    { "path": "/api/cron/fetch-rossmann-products", "schedule": "43 8 * * *" },
+    { "path": "/api/cron/fetch-rohlik-products", "schedule": "51 8 * * *" }
   ]
 }

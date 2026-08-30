@@ -1,4 +1,5 @@
 import { decodeHtmlEntities, htmlToText, metaContent, tagText } from "./html.ts";
+import type { CatalogAdapter } from "./types.ts";
 import type { CatalogProduct } from "./types.ts";
 
 export const TETA_BASE_URL = "https://www.tetadrogerie.cz";
@@ -157,3 +158,16 @@ export function parseTetaProductPage(html: string, sourceUrl: string): CatalogPr
     },
   };
 }
+
+export const tetaAdapter: CatalogAdapter = {
+  retailer: "teta",
+  hostPattern: /^(?:www\.)?tetadrogerie\.cz$/i,
+  robotsUrl: TETA_ROBOTS_URL,
+  sitemapUrl: TETA_SITEMAP_URL,
+  robotsMustAllowPath: "/eshop/katalog/",
+  robotsDeniedMessage: "Teta robots.txt currently disallows /eshop/katalog/ crawling",
+  productPath: PRODUCT_PATH,
+  preferSitemapName: /product|produkt|katalog/i,
+  parse: parseTetaProductPage,
+  externalIdFromUrl: () => null,
+};

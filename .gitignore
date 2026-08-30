@@ -22,6 +22,10 @@
 .env.test.local
 .env.production.local
 
+# catalog excel fallback dumps
+/exports/*.xlsx
+/exports/*.csv
+
 # misc
 .DS_Store
 *.pem

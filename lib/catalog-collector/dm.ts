@@ -1,5 +1,5 @@
 import { decodeHtmlEntities, htmlToText, metaContent, tagText } from "./html.ts";
-import type { CatalogProduct } from "./types.ts";
+import type { CatalogAdapter, CatalogProduct } from "./types.ts";
 
 export const DM_BASE_URL = "https://www.dm.cz";
 export const DM_ROBOTS_URL = `${DM_BASE_URL}/robots.txt`;
@@ -154,3 +154,16 @@ export function parseDmProductPage(html: string, sourceUrl: string): CatalogProd
     },
   };
 }
+
+export const dmAdapter: CatalogAdapter = {
+  retailer: "dm",
+  hostPattern: /^(?:www\.)?dm\.cz$/i,
+  robotsUrl: DM_ROBOTS_URL,
+  sitemapUrl: DM_SITEMAP_URL,
+  robotsMustAllowPath: "/p/d/1458699/denkmit-univerzalni-cistic-koncentrat",
+  robotsDeniedMessage: "dm robots.txt currently disallows public /p/d/ product crawling",
+  productPath: PRODUCT_PATH,
+  preferSitemapName: /product|produkt/i,
+  parse: parseDmProductPage,
+  externalIdFromUrl: dmExternalIdFromUrl,
+};

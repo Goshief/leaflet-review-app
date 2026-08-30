@@ -1,4 +1,4 @@
-export type CatalogRetailerId = "billa" | "teta" | "dm";
+export type CatalogRetailerId = "billa" | "teta" | "dm" | "lidl" | "rossmann" | "rohlik";
 
 export type CatalogOffer = {
   price: number | null;
@@ -45,4 +45,20 @@ export type CatalogRunStats = {
   startedAt: string;
   finishedAt: string;
   errors: Array<{ url: string; error: string }>;
+};
+
+export type CatalogAdapter = {
+  retailer: CatalogRetailerId;
+  hostPattern: RegExp;
+  robotsUrl: string;
+  sitemapUrl: string;
+  robotsMustAllowPath: string;
+  robotsDeniedMessage: string;
+  productPath: RegExp;
+  preferSitemapName?: RegExp;
+  maxSitemaps?: number;
+  concurrency?: number;
+  delayMs?: number;
+  parse: (html: string, sourceUrl: string) => CatalogProduct;
+  externalIdFromUrl: (sourceUrl: string) => string | null;
 };

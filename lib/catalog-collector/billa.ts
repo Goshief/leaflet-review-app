@@ -1,5 +1,5 @@
 import { decodeHtmlEntities, htmlToText, metaContent, tagText } from "./html.ts";
-import type { CatalogProduct } from "./types.ts";
+import type { CatalogAdapter } from "./types.ts";
 
 export const BILLA_BASE_URL = "https://www.billa.cz";
 export const BILLA_ROBOTS_URL = `${BILLA_BASE_URL}/robots.txt`;
@@ -231,3 +231,16 @@ export function parseBillaProductPage(html: string, sourceUrl: string): CatalogP
 export function billaExternalIdFromUrl(sourceUrl: string) {
   return externalIdFromUrl(sourceUrl);
 }
+
+export const billaAdapter: CatalogAdapter = {
+  retailer: "billa",
+  hostPattern: /^(?:www\.)?billa\.cz$/i,
+  robotsUrl: BILLA_ROBOTS_URL,
+  sitemapUrl: BILLA_SITEMAP_URL,
+  robotsMustAllowPath: "/produkt/",
+  robotsDeniedMessage: "BILLA robots.txt currently disallows /produkt/ crawling",
+  productPath: PRODUCT_PATH,
+  preferSitemapName: /product|produkt/i,
+  parse: parseBillaProductPage,
+  externalIdFromUrl: billaExternalIdFromUrl,
+};

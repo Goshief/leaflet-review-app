@@ -8,6 +8,9 @@ on:
       - "app/api/cron/fetch-billa-products/**"
       - "app/api/cron/fetch-teta-products/**"
       - "app/api/cron/fetch-dm-products/**"
+      - "app/api/cron/fetch-lidl-products/**"
+      - "app/api/cron/fetch-rossmann-products/**"
+      - "app/api/cron/fetch-rohlik-products/**"
       - "app/api/setrik/products/**"
       - "app/api/setrik/smart-cart/**"
       - "app/api/setrik/smart-products/**"
@@ -16,10 +19,17 @@ on:
       - "scripts/test-catalog-billa-parser.mts"
       - "scripts/test-catalog-teta-parser.mts"
       - "scripts/test-catalog-dm-parser.mts"
+      - "scripts/test-catalog-lidl-parser.mts"
+      - "scripts/test-catalog-rossmann-parser.mts"
+      - "scripts/test-catalog-rohlik-parser.mts"
+      - "scripts/test-catalog-excel.mts"
       - "scripts/test-catalog-comparison-core.mts"
+      - "app/api/catalog/**"
+      - "app/catalog/**"
       - "supabase/migrations/*catalog_product_collector.sql"
       - "supabase/migrations/*catalog_comparison_core.sql"
       - "supabase/migrations/*catalog_retailer_registry.sql"
+      - "supabase/migrations/*catalog_grocery_collectors.sql"
       - "vercel.json"
       - ".github/workflows/catalog-collector-check.yml"
   workflow_dispatch:
@@ -41,5 +51,9 @@ jobs:
       - run: node --experimental-strip-types scripts/test-catalog-billa-parser.mts
       - run: node --experimental-strip-types scripts/test-catalog-teta-parser.mts
       - run: node --experimental-strip-types scripts/test-catalog-dm-parser.mts
+      - run: node --experimental-strip-types scripts/test-catalog-lidl-parser.mts
+      - run: node --experimental-strip-types scripts/test-catalog-rossmann-parser.mts
+      - run: node --experimental-strip-types scripts/test-catalog-rohlik-parser.mts
+      - run: node --experimental-strip-types scripts/test-catalog-excel.mts
       - run: node --experimental-strip-types scripts/test-catalog-comparison-core.mts
       - run: npm run build

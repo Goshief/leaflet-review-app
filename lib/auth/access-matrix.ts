@@ -55,6 +55,7 @@ export const PAGE_ACCESS_MATRIX: PageAccessRule[] = [
     guardModule: "app/image-generation-requests/layout.tsx",
   },
   { path: "/settings", access: "admin", guardModule: "app/settings/layout.tsx" },
+  { path: "/catalog", access: "operator", guardModule: "app/catalog/layout.tsx" },
 ];
 
 export const API_ACCESS_MATRIX: ApiAccessRule[] = [
@@ -93,6 +94,7 @@ export const API_ACCESS_MATRIX: ApiAccessRule[] = [
   { file: "app/api/setrik/smart-cart/route.ts", methods: { POST: "public" } },
   { file: "app/api/setrik/smart-products/route.ts", methods: { GET: "public" } },
   { file: "app/api/setrik/smart-products/[id]/route.ts", methods: { GET: "public" } },
+  { file: "app/api/catalog/export/route.ts", methods: { GET: "operator" } },
   { file: "app/logout/route.ts", methods: { POST: "public", GET: "public" } },
 ];
 
