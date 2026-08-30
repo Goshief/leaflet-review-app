@@ -902,6 +902,7 @@ export default function ReviewPage() {
           merged.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
           `${(fileName || "letak").replace(/\.pdf$/i, "")}-strana-${metaPage}.csv`
         );
+        toast.success(`Strana ${metaPage}`, `${merged.length} produktů z parseru`);
         return;
       }
 
@@ -923,6 +924,7 @@ export default function ReviewPage() {
           msg += ` (${e.detail.slice(0, 200)})`;
         }
         setErr(msg);
+        toast.error("Parser selhal", msg.slice(0, 180));
         if (e.raw_model_output) setRawOut(e.raw_model_output);
         return;
       }
@@ -943,13 +945,18 @@ export default function ReviewPage() {
           ok.offers.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
           `${(fileName || "letak").replace(/\.pdf$/i, "")}-strana-${metaPage}.csv`
         );
+        toast.success(
+          `Strana ${metaPage}`,
+          ok.offers.length ? `${ok.offers.length} produktů z parseru` : "Parser doběhl, ale nenašel žádný produkt"
+        );
       }
     } catch {
       setErr("Síťová chyba nebo neplatná odpověď serveru.");
+      toast.error("Parser selhal", "Síťová chyba nebo neplatná odpověď serveru.");
     } finally {
       setBusy(false);
     }
-  }, [file, fileName, kind, pageNo, sourceUrl, pdfPageCount, extractMode]);
+  }, [file, fileName, kind, pageNo, sourceUrl, pdfPageCount, extractMode, toast]);
 
   const importManual = useCallback(async () => {
     const text = manualText.trim();
@@ -1984,6 +1991,43 @@ export default function ReviewPage() {
           </div>
 
           <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_12px_48px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={!canExtract || busy}
+                onClick={() => {
+                  autoReadPages.current.delete(pageNo);
+                  void runExtract();
+                }}
+                className="rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+              >
+                {busy ? `Parser čte stranu ${pageNo}…` : `Spustit parser strany ${pageNo}`}
+              </button>
+              <p className="text-sm font-semibold text-slate-700">
+                {busy
+                  ? "Čekej, výstup se sem vypíše."
+                  : err
+                    ? "Parser skončil chybou."
+                    : flat.offers.length
+                      ? `Parser: ${flat.offers.length} produktů`
+                      : ocrDump
+                        ? `Parser doběhl, 0 produktů (OCR slov: ${ocrDump.word_count})`
+                        : "Parser ještě neběžel."}
+              </p>
+            </div>
+            {err ? (
+              <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900" role="alert">
+                {err}
+              </div>
+            ) : null}
+            {ocrDump && !flat.offers.length && !busy ? (
+              <pre className="mb-4 max-h-40 overflow-auto rounded-xl bg-slate-900 p-3 text-xs text-slate-100">
+                {ocrDump.words
+                  .slice(0, 80)
+                  .map((w) => ("text" in w && typeof w.text === "string" ? w.text : String(w)))
+                  .join(" ")}
+              </pre>
+            ) : null}
             {flat.offers.length ? (
               <ProductReviewCards
                 offers={flat.offers}
