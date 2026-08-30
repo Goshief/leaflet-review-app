@@ -63,22 +63,14 @@ export async function renderPdfPageToPngFile(
   });
 }
 
-type PdfDocument = {
-  numPages: number;
-  getPage: (n: number) => Promise<{
-    getViewport: (opts: { scale: number }) => { width: number; height: number };
-    render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => { promise: Promise<void> };
-  }>;
-};
-
-export async function loadPdfDocument(file: File): Promise<PdfDocument> {
+export async function loadPdfDocument(file: File) {
   const pdfjs = await getPdfjs();
   const data = await file.arrayBuffer();
-  return pdfjs.getDocument({ data }).promise as Promise<PdfDocument>;
+  return pdfjs.getDocument({ data }).promise;
 }
 
 export async function renderLoadedPdfPage(
-  pdf: PdfDocument,
+  pdf: Awaited<ReturnType<typeof loadPdfDocument>>,
   pageNumber1Based: number,
   scale: number
 ): Promise<Blob> {
