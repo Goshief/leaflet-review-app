@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { autoMatchRetailerProduct } from "@/lib/catalog-core/matcher";
 import type { CatalogProduct } from "./types";
 
 function pragueDate(iso: string) {
@@ -104,5 +105,6 @@ export async function persistCatalogProduct(
   );
   if (historyError) throw new Error(`price history persistence: ${historyError.message}`);
 
-  return { retailerProductId, fingerprint, observedAt };
+  const match = await autoMatchRetailerProduct(supabase, retailerProductId);
+  return { retailerProductId, fingerprint, observedAt, match };
 }
