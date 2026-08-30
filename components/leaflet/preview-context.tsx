@@ -1,6 +1,10 @@
 "use client";
 
 import {
+  guessRetailerFromFilename,
+  type RetailerId,
+} from "@/lib/leaflet/guess-retailer";
+import {
   createContext,
   useCallback,
   useContext,
@@ -13,7 +17,7 @@ import {
 
 export type LeafletKind = "pdf" | "image" | "manual" | null;
 
-export type RetailerId = "lidl" | "kaufland" | "billa" | "albert" | "penny" | "other";
+export type { RetailerId };
 
 export type LeafletPreviewState = {
   file: File | null;
@@ -68,6 +72,8 @@ export function LeafletPreviewProvider({ children }: { children: ReactNode }) {
     });
     setFileName(f.name);
     setKind(isPdf ? "pdf" : "image");
+    const guessed = guessRetailerFromFilename(f.name);
+    if (guessed) setRetailer(guessed);
     return true;
   }, []);
 

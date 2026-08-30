@@ -55,12 +55,13 @@ export function heuristicToLidlOffers(
     heuristic: HeuristicProduct;
     crop: BBox | null;
   }>,
-  page_no: number | null
+  page_no: number | null,
+  store_id = "lidl"
 ): LidlOfferWithOcrCrop[] {
   return items.map(({ heuristic: h, crop }) => {
     const pack = parsePackFromUnit(h.unit);
     const row: LidlOfferWithOcrCrop = {
-      store_id: "lidl",
+      store_id,
       source_type: "leaflet",
       page_no,
       valid_from: null,

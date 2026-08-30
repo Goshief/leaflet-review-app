@@ -19,7 +19,11 @@ export type OcrPipelineResult = {
 /**
  * OCR slova → kotvy cen → okna → heuristika → řádky Lidl (bez DB, bez AI).
  */
-export function runOcrPipeline(words: OcrWord[], page_no: number | null): OcrPipelineResult {
+export function runOcrPipeline(
+  words: OcrWord[],
+  page_no: number | null,
+  options?: { store_id?: string }
+): OcrPipelineResult {
   const price_anchors = findPriceAnchors(words);
   const byAnchor = assignWordsToAnchors(words, price_anchors);
 
@@ -35,7 +39,7 @@ export function runOcrPipeline(words: OcrWord[], page_no: number | null): OcrPip
     const h = classifyBlock(merged, anchor);
     const crop = unionWordsBBox(merged);
     offers.push(
-      ...heuristicToLidlOffers([{ heuristic: h, crop }], page_no)
+      ...heuristicToLidlOffers([{ heuristic: h, crop }], page_no, options?.store_id ?? "lidl")
     );
   }
 

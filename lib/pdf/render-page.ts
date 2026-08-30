@@ -24,7 +24,8 @@ export async function getPdfPageCount(file: File): Promise<number> {
  */
 export async function renderPdfPageToPngBlob(
   file: File,
-  pageNumber1Based: number
+  pageNumber1Based: number,
+  options?: { scale?: number; type?: "image/png" | "image/jpeg"; quality?: number }
 ): Promise<Blob> {
   const pdfjs = await getPdfjs();
   const data = await file.arrayBuffer();
@@ -34,8 +35,7 @@ export async function renderPdfPageToPngBlob(
     throw new Error(`Stránka ${pageNumber1Based} není v rozsahu 1–${n}.`);
   }
   const page = await pdf.getPage(pageNumber1Based);
-  // Vyšší scale = lepší OCR na cenách (za cenu většího PNG).
-  const scale = 3;
+  const scale = options?.scale ?? 1.45;
   const viewport = page.getViewport({ scale });
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
@@ -43,24 +43,27 @@ export async function renderPdfPageToPngBlob(
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   await page.render({ canvasContext: ctx, viewport }).promise;
+  const type = options?.type ?? "image/jpeg";
+  const quality = options?.quality ?? 0.82;
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error("canvas.toBlob selhal"))),
-      "image/png"
+      type,
+      type === "image/jpeg" ? quality : undefined
     );
   });
 }
 
 export async function renderPdfPageToPngFile(
   file: File,
-  pageNumber1Based: number
+  pageNumber1Based: number,
+  options?: { scale?: number; type?: "image/png" | "image/jpeg"; quality?: number }
 ): Promise<File> {
-  const blob = await renderPdfPageToPngBlob(file, pageNumber1Based);
-  const base =
-    file.name.replace(/\.pdf$/i, "") || "letak";
-  return new File([blob], `${base}-p${pageNumber1Based}.png`, {
-    type: "image/png",
-  });
+  const type = options?.type ?? "image/jpeg";
+  const blob = await renderPdfPageToPngBlob(file, pageNumber1Based, { ...options, type });
+  const ext = type === "image/png" ? "png" : "jpg";
+  const base = file.name.replace(/\.pdf$/i, "") || "letak";
+  return new File([blob], `${base}-p${pageNumber1Based}.${ext}`, { type });
 }
 
 export async function loadPdfDocument(file: File) {

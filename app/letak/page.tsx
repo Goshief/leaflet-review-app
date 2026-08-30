@@ -27,7 +27,12 @@ export default function LetakA4Page() {
         const body = new FormData();
         body.append("file", image);
         body.append("page_no", String(page));
-        const response = await fetch("/api/extract", { method: "POST", body });
+        body.append("store_id", preview.retailer);
+        const response = await fetch("/api/extract", {
+          method: "POST",
+          body,
+          signal: AbortSignal.timeout(100_000),
+        });
         const data = await response.json().catch(() => null);
         if (!response.ok) {
           rows.push({ page_no: page, notes: data?.error || `HTTP ${response.status}`, extracted_name: "CHYBA ČTENÍ" });

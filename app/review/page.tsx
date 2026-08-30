@@ -12,6 +12,7 @@ import type { ReviewOfferRow } from "@/components/review/offers-table";
 import { useLeafletPreview } from "@/components/leaflet/preview-context";
 import { getReviewEmptyState } from "@/lib/review/empty-state";
 import { downloadLeafletOffersCsv } from "@/lib/leaflet/offers-csv";
+import { retailerLabel } from "@/lib/leaflet/guess-retailer";
 import {
   getPdfPageCount,
   renderPdfPageToPngBlob,
@@ -135,6 +136,7 @@ export default function ReviewPage() {
     blobUrl,
     kind,
     sourceUrl,
+    retailer,
     setSourceUrl,
     setFromFile,
     startManualImport,
@@ -151,6 +153,7 @@ export default function ReviewPage() {
   const [err, setErr] = useState<string | null>(null);
   const [rawOut, setRawOut] = useState<string | null>(null);
   const [extractMode, setExtractMode] = useState<"ocr" | "vision" | "local">("ocr");
+  const [extractPhase, setExtractPhase] = useState<string | null>(null);
   const [ocrDump, setOcrDump] = useState<ApiSuccess["ocr_raw"] | null>(null);
   const [manualText, setManualText] = useState("");
   const [commitBusy, setCommitBusy] = useState(false);
@@ -803,7 +806,12 @@ export default function ReviewPage() {
 
   const runExtract = useCallback(async () => {
     if (!file) return;
+    const extractSignal =
+      typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+        ? AbortSignal.timeout(100_000)
+        : undefined;
     setBusy(true);
+    setExtractPhase("Připravuji stránku…");
     setErr(null);
     setRawOut(null);
     setOffersByPage((prev) => ({ ...(prev ?? {}), [pageNo]: [] }));
@@ -818,23 +826,39 @@ export default function ReviewPage() {
       } else if (kind === "pdf" && pdfPageCount) {
         const p = Math.min(Math.max(1, pageNo), pdfPageCount);
         metaPage = p;
-        upload = await renderPdfPageToPngFile(file, p);
+        if (pdfPreviewUrl && p === pageNo) {
+          setExtractPhase("Beru vykreslený náhled…");
+          const blob = await fetch(pdfPreviewUrl).then((r) => r.blob());
+          const ext = blob.type === "image/png" ? "png" : "jpg";
+          upload = new File(
+            [blob],
+            `${(fileName || "letak").replace(/\.pdf$/i, "")}-p${p}.${ext}`,
+            { type: blob.type || "image/jpeg" }
+          );
+        } else {
+          setExtractPhase("Vykresluji stranu do obrázku…");
+          upload = await renderPdfPageToPngFile(file, p);
+        }
       } else {
         setErr("PDF se ještě načítá, počkej na počet stran.");
         setBusy(false);
+        setExtractPhase(null);
         return;
       }
 
       const fd = new FormData();
       fd.append("file", upload);
       fd.append("page_no", String(metaPage));
+      fd.append("store_id", retailer);
       if (sourceUrl.trim()) fd.append("source_url", sourceUrl.trim());
+      setExtractPhase("OCR na serveru — může trvat až 90 s…");
 
       if (extractMode === "local") {
         // OCR (zdarma) -> Local LLM (Ollama) -> Lidl JSON schéma
         const extractRes = await fetch("/api/extract", {
           method: "POST",
           body: fd,
+          signal: extractSignal,
         });
         const extractData = await extractRes.json();
         if (!extractRes.ok) {
@@ -885,6 +909,7 @@ export default function ReviewPage() {
         // Zachovej OCR crop z /api/extract, aby bylo vidět "fotky/výřezy".
         const merged = normalizedOffers.map((o, i) => ({
           ...o,
+          store_id: o.store_id && o.store_id !== "lidl" ? o.store_id : retailer,
           ocr_crop_bbox: extractedOffers[i]?.ocr_crop_bbox ?? null,
         }));
 
@@ -911,6 +936,7 @@ export default function ReviewPage() {
       const res = await fetch(endpoint, {
         method: "POST",
         body: fd,
+        signal: extractSignal,
       });
       const data = (await res.json()) as ApiSuccess | ApiErrorBody;
 
@@ -931,10 +957,14 @@ export default function ReviewPage() {
 
       const ok = data as ApiSuccess;
       if (ok.ok) {
-        setOffersByPage((prev) => ({ ...(prev ?? {}), [metaPage]: ok.offers }));
+        const stamped = ok.offers.map((row) => ({
+          ...row,
+          store_id: row.store_id && row.store_id !== "lidl" ? row.store_id : retailer,
+        }));
+        setOffersByPage((prev) => ({ ...(prev ?? {}), [metaPage]: stamped }));
         setRowStatusByPage((prev) => ({
           ...prev,
-          [metaPage]: Object.fromEntries(ok.offers.map((_, i) => [i, "pending" as const])) as Record<
+          [metaPage]: Object.fromEntries(stamped.map((_, i) => [i, "pending" as const])) as Record<
             number,
             RowReviewStatus
           >,
@@ -942,21 +972,28 @@ export default function ReviewPage() {
         setModel(ok.model);
         setOcrDump(ok.ocr_raw ?? null);
         downloadLeafletOffersCsv(
-          ok.offers.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
+          stamped.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
           `${(fileName || "letak").replace(/\.pdf$/i, "")}-strana-${metaPage}.csv`
         );
         toast.success(
           `Strana ${metaPage}`,
-          ok.offers.length ? `${ok.offers.length} produktů z parseru` : "Parser doběhl, ale nenašel žádný produkt"
+          stamped.length ? `${stamped.length} produktů z parseru` : "Parser doběhl, ale nenašel žádný produkt"
         );
       }
-    } catch {
-      setErr("Síťová chyba nebo neplatná odpověď serveru.");
-      toast.error("Parser selhal", "Síťová chyba nebo neplatná odpověď serveru.");
+    } catch (e) {
+      const timedOut =
+        (e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError")) ||
+        (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError"));
+      const msg = timedOut
+        ? "Parser překročil 100 s. Zkus znovu — stránka se teď posílá menší (JPEG) a čte se po dlaždicích."
+        : "Síťová chyba nebo neplatná odpověď serveru.";
+      setErr(msg);
+      toast.error("Parser selhal", msg);
     } finally {
       setBusy(false);
+      setExtractPhase(null);
     }
-  }, [file, fileName, kind, pageNo, sourceUrl, pdfPageCount, extractMode, toast]);
+  }, [file, fileName, kind, pageNo, sourceUrl, pdfPageCount, pdfPreviewUrl, extractMode, retailer, toast]);
 
   const importManual = useCallback(async () => {
     const text = manualText.trim();
@@ -1792,7 +1829,7 @@ export default function ReviewPage() {
             onClick={() => void runExtract()}
             className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
           >
-            {busy ? `Čtu stranu ${pageNo}…` : `Číst stranu ${pageNo} do Excelu`}
+            {busy ? extractPhase ?? `Čtu stranu ${pageNo}…` : `Číst stranu ${pageNo} do Excelu`}
           </button>
         </div>
       ) : null}
@@ -1804,7 +1841,7 @@ export default function ReviewPage() {
               Náhled stránky
             </p>
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-              Strana {pageNo} · Lidl CZ
+              Strana {pageNo} · {retailerLabel(retailer)}
             </span>
           </div>
           {kind === "manual" ? (
@@ -2001,11 +2038,11 @@ export default function ReviewPage() {
                 }}
                 className="rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
               >
-                {busy ? `Parser čte stranu ${pageNo}…` : `Spustit parser strany ${pageNo}`}
+                {busy ? extractPhase ?? `Parser čte stranu ${pageNo}…` : `Spustit parser strany ${pageNo}`}
               </button>
               <p className="text-sm font-semibold text-slate-700">
                 {busy
-                  ? "Čekej, výstup se sem vypíše."
+                  ? extractPhase ?? "Čekej, výstup se sem vypíše."
                   : err
                     ? "Parser skončil chybou."
                     : flat.offers.length
@@ -2137,7 +2174,7 @@ export default function ReviewPage() {
                     className="rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50"
                   >
                     {busy
-                      ? "Zpracovávám…"
+                      ? extractPhase ?? "Zpracovávám…"
                       : extractMode === "ocr"
                         ? "Spustit OCR"
                         : extractMode === "vision"
