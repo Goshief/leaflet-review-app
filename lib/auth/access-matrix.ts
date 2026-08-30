@@ -87,6 +87,7 @@ export const API_ACCESS_MATRIX: ApiAccessRule[] = [
   },
   { file: "app/api/parser-test/route.ts", methods: { POST: "admin" } },
   { file: "app/api/setrik/offers/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/retailers/route.ts", methods: { GET: "public" } },
   { file: "app/api/setrik/products/route.ts", methods: { GET: "public" } },
   { file: "app/api/setrik/products/[id]/route.ts", methods: { GET: "public" } },
   { file: "app/api/setrik/smart-cart/route.ts", methods: { POST: "public" } },
