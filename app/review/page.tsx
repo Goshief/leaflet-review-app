@@ -11,6 +11,7 @@ import {
 import type { ReviewOfferRow } from "@/components/review/offers-table";
 import { useLeafletPreview } from "@/components/leaflet/preview-context";
 import { getReviewEmptyState } from "@/lib/review/empty-state";
+import { downloadLeafletOffersCsv } from "@/lib/leaflet/offers-csv";
 import {
   getPdfPageCount,
   renderPdfPageToPngBlob,
@@ -897,6 +898,10 @@ export default function ReviewPage() {
         }));
         setModel(normalizeData.model ?? "ollama");
         if (normalizeData.raw_model_output) setRawOut(normalizeData.raw_model_output);
+        downloadLeafletOffersCsv(
+          merged.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
+          `${(fileName || "letak").replace(/\.pdf$/i, "")}-strana-${metaPage}.csv`
+        );
         return;
       }
 
@@ -934,13 +939,17 @@ export default function ReviewPage() {
         }));
         setModel(ok.model);
         setOcrDump(ok.ocr_raw ?? null);
+        downloadLeafletOffersCsv(
+          ok.offers.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
+          `${(fileName || "letak").replace(/\.pdf$/i, "")}-strana-${metaPage}.csv`
+        );
       }
     } catch {
       setErr("Síťová chyba nebo neplatná odpověď serveru.");
     } finally {
       setBusy(false);
     }
-  }, [file, kind, pageNo, sourceUrl, pdfPageCount, extractMode]);
+  }, [file, fileName, kind, pageNo, sourceUrl, pdfPageCount, extractMode]);
 
   const importManual = useCallback(async () => {
     const text = manualText.trim();
@@ -1388,6 +1397,15 @@ export default function ReviewPage() {
     file != null &&
     (kind === "image" || (kind === "pdf" && pdfPageCount != null && !pdfPreviewBusy));
 
+  const autoReadPages = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (!canExtract || busy || kind === "manual") return;
+    if ((offersByPage?.[pageNo] ?? []).length > 0) return;
+    if (autoReadPages.current.has(pageNo)) return;
+    autoReadPages.current.add(pageNo);
+    void runExtract();
+  }, [canExtract, busy, kind, pageNo, offersByPage, runExtract]);
+
   const goPrev = () => setPageNo((n) => Math.max(1, n - 1));
   const goNext = () =>
     setPageNo((n) =>
@@ -1761,6 +1779,14 @@ export default function ReviewPage() {
           >
             Další ⏭
           </button>
+          <button
+            type="button"
+            disabled={!canExtract || busy}
+            onClick={() => void runExtract()}
+            className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+          >
+            {busy ? `Čtu stranu ${pageNo}…` : `Číst stranu ${pageNo} do Excelu`}
+          </button>
         </div>
       ) : null}
 
@@ -1981,7 +2007,9 @@ export default function ReviewPage() {
               />
             ) : (
               <p className="text-sm text-slate-500">
-                Po extrakci se zobrazí produktové karty s cenami a výřezy (OCR).
+                {busy
+                  ? `Čtu stranu ${pageNo} parserem a ukládám do Excelu…`
+                  : "Strana se čte sama. Až doběhne, stáhne se CSV a tady budou karty produktů."}
               </p>
             )}
           </div>
