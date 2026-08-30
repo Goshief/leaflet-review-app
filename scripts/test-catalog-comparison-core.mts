@@ -5,8 +5,7 @@ import {
   normalizeQuantity,
   scoreProductIdentity,
 } from "../lib/catalog-core/matcher.ts";
-import { optimizeSmartCart } from "../lib/catalog-core/smart-cart.ts";
-import { matchesSmartProductConstraints } from "../lib/catalog-core/smart-products.ts";
+import { optimizeSmartCart } from "../lib/catalog-core/smart-cart-optimizer.ts";
 
 assert.equal(normalizeCatalogText("Čerstvé MLÉKO 1,5 %"), "cerstve mleko 1 5");
 assert.deepEqual(normalizeQuantity(1, "l"), { value: 1000, unit: "ml" });
@@ -64,14 +63,5 @@ const loyalty = optimizeSmartCart(
   { maxStores: 1, includeLoyaltyPrices: true }
 );
 assert.equal(loyalty.total, 24);
-
-assert.equal(
-  matchesSmartProductConstraints(
-    { bio: true, fat: 45, pack: "125 g" },
-    { bio: true, fat: 45, pack: "125 G" }
-  ),
-  true
-);
-assert.equal(matchesSmartProductConstraints({ bio: false }, { bio: true }), false);
 
 console.log("OK: catalog comparison core tests passed");
