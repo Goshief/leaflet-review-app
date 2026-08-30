@@ -4,9 +4,16 @@ on:
   pull_request:
     paths:
       - "lib/catalog-collector/**"
+      - "lib/catalog-core/**"
       - "app/api/cron/fetch-billa-products/**"
+      - "app/api/setrik/products/**"
+      - "app/api/setrik/smart-cart/**"
+      - "app/api/setrik/smart-products/**"
+      - "lib/auth/access-matrix.ts"
       - "scripts/test-catalog-billa-parser.mts"
+      - "scripts/test-catalog-comparison-core.mts"
       - "supabase/migrations/*catalog_product_collector.sql"
+      - "supabase/migrations/*catalog_comparison_core.sql"
       - "vercel.json"
       - ".github/workflows/catalog-collector-check.yml"
   workflow_dispatch:
@@ -26,4 +33,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node --experimental-strip-types scripts/test-catalog-billa-parser.mts
+      - run: node --experimental-strip-types scripts/test-catalog-comparison-core.mts
       - run: npm run build
