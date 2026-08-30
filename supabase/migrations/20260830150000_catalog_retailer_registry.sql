@@ -28,7 +28,7 @@ INSERT INTO public.catalog_sources
 VALUES
   ('albert', 'Albert', 'https://www.albert.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Adapter must be verified against current public official sources.'),
   ('billa', 'BILLA', 'https://www.billa.cz', 'https://www.billa.cz/sitemap.xml', true, 'verified', '{"catalog":true,"price_history":true,"loyalty_price":true,"raw_archive":true}'::jsonb, 'Public robots.txt + sitemap + public product pages.'),
-  ('dm', 'dm drogerie', 'https://www.dm.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Public online shop exists; dedicated adapter pending verification.'),
+  ('dm', 'dm drogerie', 'https://www.dm.cz', 'https://www.dm.cz/sitemap.xml', true, 'verified', '{"catalog":true,"price_history":true,"loyalty_price":false,"raw_archive":true,"gtin":true}'::jsonb, 'Public robots.txt + sitemap + public /p/d product pages.'),
   ('globus', 'Globus', 'https://www.globus.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Dedicated adapter pending verification.'),
   ('kaufland', 'Kaufland', 'https://www.kaufland.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Keep grocery/leaflet data separate from marketplace assortment.'),
   ('kosik', 'Košík.cz', 'https://www.kosik.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Dedicated adapter pending verification.'),
@@ -69,6 +69,16 @@ SET collector_status = 'verified',
     source_notes = 'Public robots.txt + sitemap index + public /eshop/katalog product pages.',
     updated_at = now()
 WHERE retailer_id = 'teta';
+
+UPDATE public.catalog_sources
+SET collector_status = 'verified',
+    enabled = true,
+    sitemap_url = 'https://www.dm.cz/sitemap.xml',
+    last_verified_at = COALESCE(last_verified_at, now()),
+    capabilities = capabilities || '{"catalog":true,"price_history":true,"loyalty_price":false,"raw_archive":true,"gtin":true}'::jsonb,
+    source_notes = 'Public robots.txt + sitemap + public /p/d product pages.',
+    updated_at = now()
+WHERE retailer_id = 'dm';
 
 CREATE INDEX IF NOT EXISTS catalog_sources_status_idx
   ON public.catalog_sources (collector_status, enabled);
