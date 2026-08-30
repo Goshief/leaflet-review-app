@@ -27,7 +27,7 @@ INSERT INTO public.catalog_sources
   (retailer_id, display_name, base_url, sitemap_url, enabled, collector_status, capabilities, source_notes)
 VALUES
   ('albert', 'Albert', 'https://www.albert.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Adapter must be verified against current public official sources.'),
-  ('billa', 'BILLA', 'https://www.billa.cz', 'https://www.billa.cz/sitemap.xml', true, 'verified', '{"catalog":true,"price_history":true,"loyalty_price":true,"raw_archive":true}'::jsonb, 'Public robots.txt + sitemap + public product pages; collector implemented in this PR.'),
+  ('billa', 'BILLA', 'https://www.billa.cz', 'https://www.billa.cz/sitemap.xml', true, 'verified', '{"catalog":true,"price_history":true,"loyalty_price":true,"raw_archive":true}'::jsonb, 'Public robots.txt + sitemap + public product pages.'),
   ('dm', 'dm drogerie', 'https://www.dm.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Public online shop exists; dedicated adapter pending verification.'),
   ('globus', 'Globus', 'https://www.globus.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Dedicated adapter pending verification.'),
   ('kaufland', 'Kaufland', 'https://www.kaufland.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Keep grocery/leaflet data separate from marketplace assortment.'),
@@ -37,7 +37,7 @@ VALUES
   ('rohlik', 'Rohlík.cz', 'https://www.rohlik.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Dedicated adapter pending verification.'),
   ('rossmann', 'ROSSMANN', 'https://www.rossmann.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Public e-shop exists; dedicated adapter pending verification.'),
   ('tesco', 'Tesco', 'https://nakup.itesco.cz/groceries/cs-CZ', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Dedicated adapter pending verification.'),
-  ('teta', 'Teta drogerie', 'https://www.tetadrogerie.cz', NULL, false, 'pending', '{"catalog":false,"price_history":false}'::jsonb, 'Public e-shop exposes product prices and unit prices; dedicated adapter pending.')
+  ('teta', 'Teta drogerie', 'https://www.tetadrogerie.cz', 'https://www.tetadrogerie.cz/sitemap_index.xml', true, 'verified', '{"catalog":true,"price_history":true,"loyalty_price":false,"raw_archive":true}'::jsonb, 'Public robots.txt + sitemap index + public /eshop/katalog product pages.')
 ON CONFLICT (retailer_id) DO UPDATE SET
   display_name = EXCLUDED.display_name,
   base_url = EXCLUDED.base_url,
@@ -59,6 +59,16 @@ SET collector_status = 'verified',
     capabilities = capabilities || '{"catalog":true,"price_history":true,"loyalty_price":true,"raw_archive":true}'::jsonb,
     updated_at = now()
 WHERE retailer_id = 'billa';
+
+UPDATE public.catalog_sources
+SET collector_status = 'verified',
+    enabled = true,
+    sitemap_url = 'https://www.tetadrogerie.cz/sitemap_index.xml',
+    last_verified_at = COALESCE(last_verified_at, now()),
+    capabilities = capabilities || '{"catalog":true,"price_history":true,"loyalty_price":false,"raw_archive":true}'::jsonb,
+    source_notes = 'Public robots.txt + sitemap index + public /eshop/katalog product pages.',
+    updated_at = now()
+WHERE retailer_id = 'teta';
 
 CREATE INDEX IF NOT EXISTS catalog_sources_status_idx
   ON public.catalog_sources (collector_status, enabled);
