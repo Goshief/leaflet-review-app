@@ -1,0 +1,29 @@
+name: Catalog collector verification
+
+on:
+  pull_request:
+    paths:
+      - "lib/catalog-collector/**"
+      - "app/api/cron/fetch-billa-products/**"
+      - "scripts/test-catalog-billa-parser.mts"
+      - "supabase/migrations/*catalog_product_collector.sql"
+      - "vercel.json"
+      - ".github/workflows/catalog-collector-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --experimental-strip-types scripts/test-catalog-billa-parser.mts
+      - run: npm run build
