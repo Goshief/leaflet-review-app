@@ -26,7 +26,7 @@ export type ApiAccessRule = {
 /**
  * Public exceptions — proven public purpose from implementation:
  * - `/` Setrik shopper homepage (public offers UI)
- * - `/api/setrik/offers` public offers feed for Setrik
+ * - `/api/setrik/*` public comparison/search/smart-cart APIs
  * - `/api/auth/login` public login endpoint (same-origin + rate limited)
  * - `/login`, `/logout`, `/forbidden` auth UX (must not redirect-loop)
  */
@@ -87,6 +87,11 @@ export const API_ACCESS_MATRIX: ApiAccessRule[] = [
   },
   { file: "app/api/parser-test/route.ts", methods: { POST: "admin" } },
   { file: "app/api/setrik/offers/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/products/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/products/[id]/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/smart-cart/route.ts", methods: { POST: "public" } },
+  { file: "app/api/setrik/smart-products/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/smart-products/[id]/route.ts", methods: { GET: "public" } },
   { file: "app/logout/route.ts", methods: { POST: "public", GET: "public" } },
 ];
 
