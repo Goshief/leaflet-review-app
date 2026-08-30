@@ -29,7 +29,7 @@ export const LIDL_PAGE_OFFER_KEYS = [
 export type LidlPageOfferKey = (typeof LIDL_PAGE_OFFER_KEYS)[number];
 
 export type LidlPageOffer = {
-  store_id: "lidl";
+  store_id: string;
   source_type: "leaflet";
   page_no: number | null;
   valid_from: string | null;

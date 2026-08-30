@@ -1443,7 +1443,7 @@ export default function ReviewPage() {
 
   const autoReadPages = useRef<Set<number>>(new Set());
   useEffect(() => {
-    if (!canExtract || busy || kind === "manual") return;
+    if (!canExtract || busy) return;
     if ((offersByPage?.[pageNo] ?? []).length > 0) return;
     if (autoReadPages.current.has(pageNo)) return;
     autoReadPages.current.add(pageNo);
