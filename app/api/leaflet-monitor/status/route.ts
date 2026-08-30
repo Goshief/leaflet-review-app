@@ -9,6 +9,18 @@ export const runtime = "nodejs";
 const BUCKET = "leaflet-intake";
 const MS_DAY = 86_400_000;
 const DEFAULT_DAYS=[1,4];
+const SUPABASE_TIMEOUT_MS=6_000;
+
+async function supabaseAvailable(supabase:any):Promise<boolean>{
+  try{
+    const probe=supabase.storage.from(BUCKET).list("_checks",{limit:1});
+    const result=await Promise.race([
+      probe,
+      new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("SUPABASE_TIMEOUT")),SUPABASE_TIMEOUT_MS)),
+    ]);
+    return !result.error;
+  }catch{return false;}
+}
 
 async function readJson<T>(supabase: any, path: string): Promise<T | null> {
   const { data, error } = await supabase.storage.from(BUCKET).download(path);
@@ -75,6 +87,19 @@ export async function GET() {
   if (!gate.ok) return gate.response;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NextResponse.json({ ok: false, error: "Supabase není nakonfigurovaný." }, { status: 503 });
+
+  if(!await supabaseAvailable(supabase)){
+    return NextResponse.json({
+      ok:true,
+      retailers:RETAILERS.map((retailer)=>({
+        ...retailer,pdf_count:0,latest_pdf:null,last_check:null,
+        learning:{confidence:0,preferred_weekdays:DEFAULT_DAYS,schedule_is_learned:false,checks_this_week_limit:0,last_check_at:null,last_visit_at:null,last_visit_url:null,last_downloaded_at:null,next_check_at:null,download_hits:[0,0,0,0,0,0,0]},
+        ai:null,
+      })),
+      storage_status:"offline",
+      warning:"Supabase je dočasně nedostupný. Automatické hlídání se obnoví bez zásahu, jakmile služba odpoví.",
+    },{status:200,headers:{"Retry-After":"60"}});
+  }
 
   const rows: any[] = [];
   let storageDegraded = false;
