@@ -7,12 +7,15 @@ on:
       - "lib/catalog-core/**"
       - "app/api/cron/fetch-billa-products/**"
       - "app/api/cron/fetch-teta-products/**"
+      - "app/api/cron/fetch-dm-products/**"
       - "app/api/setrik/products/**"
       - "app/api/setrik/smart-cart/**"
       - "app/api/setrik/smart-products/**"
+      - "app/api/setrik/retailers/**"
       - "lib/auth/access-matrix.ts"
       - "scripts/test-catalog-billa-parser.mts"
       - "scripts/test-catalog-teta-parser.mts"
+      - "scripts/test-catalog-dm-parser.mts"
       - "scripts/test-catalog-comparison-core.mts"
       - "supabase/migrations/*catalog_product_collector.sql"
       - "supabase/migrations/*catalog_comparison_core.sql"
@@ -37,5 +40,6 @@ jobs:
       - run: npm ci
       - run: node --experimental-strip-types scripts/test-catalog-billa-parser.mts
       - run: node --experimental-strip-types scripts/test-catalog-teta-parser.mts
+      - run: node --experimental-strip-types scripts/test-catalog-dm-parser.mts
       - run: node --experimental-strip-types scripts/test-catalog-comparison-core.mts
       - run: npm run build
