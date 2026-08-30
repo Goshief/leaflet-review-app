@@ -7,6 +7,7 @@ import {
   catalogProductsToCsvFiles,
   catalogProductsToXlsx,
 } from "../lib/catalog-collector/excel.ts";
+import { isSafeSnapshotName } from "../lib/catalog-collector/snapshot.ts";
 import type { CatalogProduct, CatalogRunStats } from "../lib/catalog-collector/types.ts";
 
 const product: CatalogProduct = {
@@ -73,5 +74,10 @@ assert.match(csvFiles["retailer_products.csv"], /external_id/);
 assert.match(csvFiles["retailer_products.csv"], /10000794/);
 assert.match(csvFiles["retailer_offers_current.csv"], /offer_fingerprint/);
 assert.equal(csvFiles["retailer_products.csv"].charCodeAt(0), 0xfeff);
+
+assert.equal(isSafeSnapshotName("catalog-all-latest.xlsx"), true);
+assert.equal(isSafeSnapshotName("catalog-lidl-latest.xlsx"), true);
+assert.equal(isSafeSnapshotName("../secret.xlsx"), false);
+assert.equal(isSafeSnapshotName("catalog-lidl-latest.csv"), false);
 
 console.log("OK: catalog excel export tests passed");

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { CATALOG_RETAILER_IDS, getCatalogAdapter } from "@/lib/catalog-collector/adapters";
 import { catalogProductsToCsvFiles, catalogProductsToXlsx } from "@/lib/catalog-collector/excel";
 import { collectCatalogOffline } from "@/lib/catalog-collector/offline-run";
+import { writeCatalogSnapshot } from "@/lib/catalog-collector/snapshot";
 import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
@@ -49,6 +50,7 @@ export async function GET(req: Request) {
     for (const [filename, csv] of Object.entries(csvFiles)) {
       await writeFile(path.join(dir, `${base}-${filename}`), csv, "utf8");
     }
+    await writeCatalogSnapshot(`catalog-${adapter.retailer}-latest.xlsx`, xlsx);
 
     return new NextResponse(new Uint8Array(xlsx), {
       status: 200,

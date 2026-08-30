@@ -95,6 +95,8 @@ export const API_ACCESS_MATRIX: ApiAccessRule[] = [
   { file: "app/api/setrik/smart-products/route.ts", methods: { GET: "public" } },
   { file: "app/api/setrik/smart-products/[id]/route.ts", methods: { GET: "public" } },
   { file: "app/api/catalog/export/route.ts", methods: { GET: "operator" } },
+  { file: "app/api/catalog/files/route.ts", methods: { GET: "operator" } },
+  { file: "app/api/catalog/files/[name]/route.ts", methods: { GET: "operator" } },
   { file: "app/logout/route.ts", methods: { POST: "public", GET: "public" } },
 ];
 

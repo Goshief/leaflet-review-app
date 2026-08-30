@@ -75,6 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 px-3 py-4">
           {navItem("/", pathname, "Přehled", "📊")}
+          {navItem("/catalog", pathname, "Katalog Excel", "📗")}
           {navItem("/batches", pathname, "Dávky", "📄")}
           {navItem("/quarantine", pathname, "Karanténa (DB)", "🗂")}
           {navItem("/quarantine/local", pathname, "Lokální karanténa", "📋")}
@@ -107,6 +108,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           <nav className="flex flex-wrap gap-1.5 pb-1 text-xs font-medium lg:hidden">
+            <Link href="/catalog" className="rounded-full bg-indigo-100 px-2.5 py-1 font-semibold text-indigo-800">
+              Katalog Excel
+            </Link>
             <Link href="/batches" className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">
               Dávky
             </Link>

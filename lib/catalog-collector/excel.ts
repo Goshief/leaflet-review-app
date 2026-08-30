@@ -358,12 +358,27 @@ ${overrides}
   ]);
 }
 
+function runRow(stats: CatalogRunStats): Cell[] {
+  return [
+    stats.retailer,
+    stats.failed > 0 && stats.saved === 0 ? "failed" : "completed",
+    stats.discovered,
+    stats.attempted,
+    stats.saved,
+    stats.failed,
+    stats.startedAt,
+    stats.finishedAt,
+  ];
+}
+
 export function catalogProductsToXlsx(args: {
   products: CatalogProduct[];
   stats: CatalogRunStats;
   collectedAt: string;
+  runs?: CatalogRunStats[];
 }) {
   const tables = catalogImportTables(args.products, args.collectedAt);
+  const runs = args.runs?.length ? args.runs : [args.stats];
   return workbookFromSheets([
     { name: "retailer_products", headers: tables.retailer_products.headers, rows: tables.retailer_products.rows },
     { name: "retailer_offers_current", headers: tables.retailer_offers_current.headers, rows: tables.retailer_offers_current.rows },
@@ -371,16 +386,7 @@ export function catalogProductsToXlsx(args: {
     {
       name: "catalog_collector_runs",
       headers: ["retailer_id", "status", "discovered_count", "attempted_count", "saved_count", "failed_count", "started_at", "finished_at"],
-      rows: [[
-        args.stats.retailer,
-        args.stats.failed > 0 && args.stats.saved === 0 ? "failed" : "completed",
-        args.stats.discovered,
-        args.stats.attempted,
-        args.stats.saved,
-        args.stats.failed,
-        args.stats.startedAt,
-        args.stats.finishedAt,
-      ]],
+      rows: runs.map(runRow),
     },
   ]);
 }
