@@ -1,5 +1,5 @@
 import { decodeHtmlEntities, htmlToText, metaContent, tagText } from "./html.ts";
-import type { CatalogAdapter } from "./types.ts";
+import type { CatalogAdapter, CatalogProduct } from "./types.ts";
 
 export const BILLA_BASE_URL = "https://www.billa.cz";
 export const BILLA_ROBOTS_URL = `${BILLA_BASE_URL}/robots.txt`;
