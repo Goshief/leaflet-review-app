@@ -3,6 +3,7 @@ import { extractLeafletCandidates } from "../leaflet-review/extractor.ts";
 import { applyPromoEvidence } from "../leaflet-review/promo-resolver.ts";
 import { findPriceAnchors } from "./price-anchors.ts";
 import { candidatesToLidlOffers, type LidlOfferWithOcrCrop } from "./to-lidl-offer.ts";
+import { applyBillaStaging, parseLeafletHeaderDates } from "../leaflet/billa-staging.ts";
 
 export type OcrPipelineResult = {
   ocr_words: OcrWord[];
@@ -52,17 +53,30 @@ export function runOcrPipeline(
   }
 
   const { flipped, maxY, minY } = flipWordsYUp(words);
+  const store_id = options?.store_id ?? "lidl";
+  const pageText = words.map((w) => w.text).join(" ");
+  const dates = parseLeafletHeaderDates(pageText);
   const candidates = extractLeafletCandidates(flipped, {
     pageNo: page_no ?? 1,
-    validFrom: null,
-    validTo: null,
+    validFrom: dates.valid_from,
+    validTo: dates.valid_to,
   }).map((c) => applyPromoEvidence(c, flipped));
 
-  const offers = candidatesToLidlOffers(
-    candidates,
-    page_no,
-    options?.store_id ?? "lidl",
-    (c) => unflipBox(c.source_bbox, maxY, minY)
+  const offers = applyBillaStaging(
+    candidatesToLidlOffers(
+      candidates,
+      page_no,
+      store_id,
+      (c) => unflipBox(c.source_bbox, maxY, minY)
+    ),
+    {
+      store_id,
+      page_no,
+      pageText,
+      dates,
+      words: flipped,
+      layoutBoxes: candidates.map((c) => c.source_bbox),
+    }
   );
 
   return {

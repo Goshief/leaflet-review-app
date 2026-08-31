@@ -2,7 +2,7 @@
 
 import { LeafletA4Viewer } from "@/components/leaflet/a4-viewer";
 import { useLeafletPreview } from "@/components/leaflet/preview-context";
-import { leafletOffersToCsv } from "@/lib/leaflet/offers-csv";
+import { leafletOffersToCsv, leafletOffersToJson } from "@/lib/leaflet/offers-csv";
 import { extractPdfPageWords } from "@/lib/pdf/render-page";
 import { pdfTextLayerLooksUsable } from "@/lib/pdf/text-words";
 import { useRouter } from "next/navigation";
@@ -47,17 +47,24 @@ export default function LetakA4Page() {
           for (const offer of offers) rows.push({ ...offer, page_no: page });
         }
       }
+      const base = (file.name || "letak").replace(/\.pdf$/i, "");
       const csv = leafletOffersToCsv(rows);
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${(file.name || "letak").replace(/\.pdf$/i, "")}-produkty.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setReading(`Hotovo: ${rows.length} řádků z ${count} stran. CSV je ke stažení.`);
+      const json = leafletOffersToJson(rows);
+      for (const [body, type, name] of [
+        [csv, "text/csv;charset=utf-8", `${base}-offer-raw.csv`],
+        [json, "application/json;charset=utf-8", `${base}-offer-raw.json`],
+      ] as const) {
+        const blob = new Blob([body], { type });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      }
+      setReading(`Hotovo: ${rows.length} řádků z ${count} stran. Excel i JSON (21 polí) jsou ke stažení.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setReading("");

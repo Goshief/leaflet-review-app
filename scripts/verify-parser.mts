@@ -25,7 +25,13 @@ if (parsed.ok) {
   assert.equal(parsed.offers[0].page_no, 1);
 }
 
-const bad = parseLidlPageOffersJson(`[{"store_id":"wrong"}]`, {
+const billa = parseLidlPageOffersJson(
+  `[{"store_id":"billa","source_type":"leaflet","currency":"CZK","page_no":1}]`,
+  { fillMissingNullKeys: true }
+);
+assert(billa.ok, "store_id billa musí projít");
+
+const bad = parseLidlPageOffersJson(`[{"store_id":"Lidl"}]`, {
   fillMissingNullKeys: true,
 });
 assert(!bad.ok, "neplatný store_id musí selhat");

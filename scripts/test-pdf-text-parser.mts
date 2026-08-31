@@ -103,6 +103,13 @@ const words: OcrWord[] = [
   w("109,90", 800, 18, 12, 50),
   w("běžná", 900, 400, 11),
   w("30,30", 900, 382, 11),
+  w("Chléb dar z polí", 40, 1090, 14, 150),
+  w("450 g", 40, 1072, 11),
+  w("100 g = 8,87 Kč s Klubem", 40, 990, 10, 190),
+  w("BILLA klub", 470, 1110, 12),
+  w("-20%", 490, 1070, 12),
+  w("39,90", 500, 1050, 36, 72),
+  w("běžná cena 49,90", 470, 1006, 11, 130),
 ];
 
 const parsed = parseLeafletPageFromPdfText(words, 1, "billa");
@@ -116,15 +123,33 @@ assert.equal(byPrice(109.9).length, 0, "109,90 po zbytek týdne není produkt");
 assert.equal(byPrice(30.3).length, 0);
 assert.ok(!names.some((n) => /^(?:běžná|cenazatkg|víkendových)$/i.test(n)), names.join(" | "));
 
-const haagen = byPrice(79.9)[0];
-assert.ok(haagen && /H[äa]agen|Dazs/i.test(String(haagen.extracted_name)), `Häagen-Dazs 79,90, mám ${names.join("; ")}`);
-assert.equal(haagen.typical_price_per_unit, 17.37);
+const haagen = named.filter((o) => /H[äa]agen|Dazs/i.test(String(o.extracted_name)));
+assert.ok(haagen.length >= 1, `Häagen-Dazs chybí, mám ${names.join("; ")}`);
+assert.ok(haagen.every((o) => Math.abs(Number(o.price_total) - 79.9) < 0.02), `Häagen-Dazs musí být 79,90, mám ${haagen.map((o) => o.price_total).join(",")}`);
+assert.equal(haagen[0]!.typical_price_per_unit, 17.37);
 
 const maliny = byPrice(34.9)[0];
 assert.ok(maliny && /Maliny/i.test(String(maliny.extracted_name)));
 
 const urquell = byPrice(25.9)[0];
 assert.ok(urquell && /Pilsner|Urquell/i.test(String(urquell.extracted_name)));
+
+const combo = named.filter((o) => /hamburger|bulka/i.test(String(o.extracted_name)));
+assert.ok(combo.length >= 1, `kombo v názvech: ${names.join("; ")}`);
+for (const o of combo) {
+  if (/KOMBO/i.test(String(o.raw_text_block ?? ""))) {
+    assert.equal(o.price_total, null, `${o.extracted_name} s KOMBO musí mít price_total null`);
+    assert.equal(o.notes, "shared combo price");
+  }
+}
+
+const chleb = named.find((o) => /Chléb|dar z polí/i.test(String(o.extracted_name)));
+assert.ok(chleb, `Chléb dar z polí chybí (široký banner), mám: ${names.join("; ")}`);
+assert.ok(!/billa\s*klub/i.test(String(chleb.extracted_name)), `název nesmí obsahovat BILLA klub: ${chleb.extracted_name}`);
+assert.ok(Math.abs(Number(chleb.price_total) - 39.9) < 0.02, `chléb cena ${chleb.price_total}`);
+assert.equal(chleb.pack_unit, "g");
+assert.equal(chleb.pack_unit_qty, 450);
+assert.equal(chleb.has_loyalty_card_price, true);
 
 assert.ok(named.length >= 10, `málo produktů: ${named.length} ${names.join("; ")}`);
 

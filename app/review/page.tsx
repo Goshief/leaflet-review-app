@@ -11,7 +11,7 @@ import {
 import type { ReviewOfferRow } from "@/components/review/offers-table";
 import { useLeafletPreview } from "@/components/leaflet/preview-context";
 import { getReviewEmptyState } from "@/lib/review/empty-state";
-import { downloadLeafletOffersCsv } from "@/lib/leaflet/offers-csv";
+import { downloadLeafletOffersCsv, downloadLeafletOffersJson } from "@/lib/leaflet/offers-csv";
 import { retailerLabel } from "@/lib/leaflet/guess-retailer";
 import {
   getPdfPageCount,
@@ -1901,7 +1901,7 @@ export default function ReviewPage() {
             onClick={() => void runExtract()}
             className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
           >
-            {busy ? extractPhase ?? `Čtu stranu ${pageNo}…` : `Číst stranu ${pageNo} do Excelu`}
+            {busy ? extractPhase ?? `Čtu stranu ${pageNo}…` : `Číst stranu ${pageNo}`}
           </button>
         </div>
       ) : null}
@@ -2111,6 +2111,32 @@ export default function ReviewPage() {
                 className="rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
               >
                 {busy ? extractPhase ?? `Parser čte stranu ${pageNo}…` : `Spustit parser strany ${pageNo}`}
+              </button>
+              <button
+                type="button"
+                disabled={!flat.offers.length || busy}
+                onClick={() =>
+                  downloadLeafletOffersCsv(
+                    flat.offers,
+                    `${(fileName || "letak").replace(/\.pdf$/i, "")}-offer-raw.csv`
+                  )
+                }
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Export Excel
+              </button>
+              <button
+                type="button"
+                disabled={!flat.offers.length || busy}
+                onClick={() =>
+                  downloadLeafletOffersJson(
+                    flat.offers,
+                    `${(fileName || "letak").replace(/\.pdf$/i, "")}-offer-raw.json`
+                  )
+                }
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Export JSON
               </button>
               <p className="text-sm font-semibold text-slate-700">
                 {busy
