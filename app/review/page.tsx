@@ -17,7 +17,9 @@ import {
   getPdfPageCount,
   renderPdfPageToPngBlob,
   renderPdfPageToPngFile,
+  extractPdfPageWords,
 } from "@/lib/pdf/render-page";
+import { pdfTextLayerLooksUsable } from "@/lib/pdf/text-words";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -29,7 +31,7 @@ type ApiSuccess = {
   model: string;
   page_no: number | null;
   source_url: string | null;
-  mode?: "ocr";
+  mode?: "ocr" | "pdf_text";
   ocr_raw?: {
     word_count: number;
     words: Array<{ text: string; x: number; y: number; w: number; h: number }>;
@@ -47,6 +49,8 @@ type ApiErrorBody = {
   raw_model_output?: string;
   detail?: string;
 };
+
+type ExtractMode = "layout" | "ocr" | "vision" | "local";
 
 type ApprovedValidationIssue = {
   flatIndex: number;
@@ -152,7 +156,7 @@ export default function ReviewPage() {
   const [model, setModel] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [rawOut, setRawOut] = useState<string | null>(null);
-  const [extractMode, setExtractMode] = useState<"ocr" | "vision" | "local">("ocr");
+  const [extractMode, setExtractMode] = useState<ExtractMode>("layout");
   const [extractPhase, setExtractPhase] = useState<string | null>(null);
   const [ocrDump, setOcrDump] = useState<ApiSuccess["ocr_raw"] | null>(null);
   const [manualText, setManualText] = useState("");
@@ -401,11 +405,12 @@ export default function ReviewPage() {
       if (typeof s.pageNo === "number" && s.pageNo >= 1) setPageNo(s.pageNo);
       if (typeof s.sourceUrl === "string") setSourceUrl(s.sourceUrl);
       if (
+        s.extractMode === "layout" ||
         s.extractMode === "ocr" ||
         s.extractMode === "vision" ||
         s.extractMode === "local"
       ) {
-        setExtractMode(s.extractMode);
+        setExtractMode(s.extractMode === "ocr" ? "layout" : s.extractMode);
       }
       if (typeof s.model === "string") setModel(s.model);
       if (typeof s.manualText === "string") setManualText(s.manualText);
@@ -612,7 +617,7 @@ export default function ReviewPage() {
     if (typeof window === "undefined") return;
     const p = new URLSearchParams(window.location.search);
     const e = (p.get("extract") ?? "").trim();
-    if (e === "ocr" || e === "vision" || e === "local") setExtractMode(e);
+    if (e === "layout" || e === "ocr" || e === "vision" || e === "local") setExtractMode(e);
   }, []);
 
   useEffect(() => {
@@ -819,13 +824,78 @@ export default function ReviewPage() {
     setModel(null);
     setOcrDump(null);
     try {
-      let upload: File;
       let metaPage = pageNo;
+      if (kind === "pdf" && pdfPageCount) {
+        metaPage = Math.min(Math.max(1, pageNo), pdfPageCount);
+      } else if (kind === "pdf" && !pdfPageCount) {
+        setErr("PDF se ještě načítá, počkej na počet stran.");
+        setBusy(false);
+        setExtractPhase(null);
+        return;
+      }
+
+      if (kind === "pdf" && extractMode === "layout") {
+        setExtractPhase("Čtu textovou vrstvu PDF…");
+        const { words } = await extractPdfPageWords(file, metaPage);
+        if (!pdfTextLayerLooksUsable(words)) {
+          const msg =
+            "Tato strana nemá použitelnou textovou vrstvu (sken). Zapni Vision, nebo OCR jen pro sken.";
+          setErr(msg);
+          toast.error("Parser", msg);
+          return;
+        }
+        const res = await fetch("/api/parse-leaflet-page", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            words,
+            page_no: metaPage,
+            store_id: retailer,
+            source_url: sourceUrl.trim() || null,
+          }),
+          signal: extractSignal,
+        });
+        const data = (await res.json()) as ApiSuccess | ApiErrorBody;
+        if (!res.ok) {
+          const e = data as ApiErrorBody;
+          const msg = e.error || `HTTP ${res.status}`;
+          setErr(msg);
+          toast.error("Parser selhal", msg.slice(0, 180));
+          return;
+        }
+        const ok = data as ApiSuccess;
+        if (ok.ok) {
+          const stamped = ok.offers.map((row) => ({
+            ...row,
+            store_id: row.store_id && row.store_id !== "lidl" ? row.store_id : retailer,
+          }));
+          setOffersByPage((prev) => ({ ...(prev ?? {}), [metaPage]: stamped }));
+          setRowStatusByPage((prev) => ({
+            ...prev,
+            [metaPage]: Object.fromEntries(stamped.map((_, i) => [i, "pending" as const])) as Record<
+              number,
+              RowReviewStatus
+            >,
+          }));
+          setModel(ok.model);
+          setOcrDump(ok.ocr_raw ?? null);
+          downloadLeafletOffersCsv(
+            stamped.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
+            `${(fileName || "letak").replace(/\.pdf$/i, "")}-strana-${metaPage}.csv`
+          );
+          toast.success(
+            `Strana ${metaPage}`,
+            stamped.length ? `${stamped.length} produktů z PDF textu` : "Parser doběhl, ale nenašel žádný produkt"
+          );
+        }
+        return;
+      }
+
+      let upload: File;
       if (kind === "image") {
         upload = file;
       } else if (kind === "pdf" && pdfPageCount) {
-        const p = Math.min(Math.max(1, pageNo), pdfPageCount);
-        metaPage = p;
+        const p = metaPage;
         if (pdfPreviewUrl && p === pageNo) {
           setExtractPhase("Beru vykreslený náhled…");
           const blob = await fetch(pdfPreviewUrl).then((r) => r.blob());
@@ -932,7 +1002,7 @@ export default function ReviewPage() {
       }
 
       const endpoint =
-        extractMode === "ocr" ? "/api/ocr-lidl-page" : "/api/parse-lidl-page";
+        extractMode === "vision" ? "/api/parse-lidl-page" : "/api/ocr-lidl-page";
       const res = await fetch(endpoint, {
         method: "POST",
         body: fd,
@@ -985,7 +1055,7 @@ export default function ReviewPage() {
         (e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError")) ||
         (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError"));
       const msg = timedOut
-        ? "Parser překročil 100 s. Zkus znovu — stránka se teď posílá menší (JPEG) a čte se po dlaždicích."
+        ? "Parser překročil 100 s."
         : "Síťová chyba nebo neplatná odpověď serveru.";
       setErr(msg);
       toast.error("Parser selhal", msg);
@@ -1726,7 +1796,9 @@ export default function ReviewPage() {
               {
                 label: "Extrakce",
                 value:
-                  extractMode === "ocr"
+                  extractMode === "layout"
+                    ? "PDF text"
+                    : extractMode === "ocr"
                     ? "OCR"
                     : extractMode === "vision"
                       ? "Vision"
@@ -2108,12 +2180,24 @@ export default function ReviewPage() {
                     <input
                       type="radio"
                       name="extract-mode"
+                      checked={extractMode === "layout"}
+                      onChange={() => setExtractMode("layout")}
+                      className="text-indigo-600"
+                    />
+                    <span className="text-slate-800">
+                      <strong className="text-indigo-700">PDF text</strong> — layout extraktor
+                    </span>
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="extract-mode"
                       checked={extractMode === "ocr"}
                       onChange={() => setExtractMode("ocr")}
                       className="text-indigo-600"
                     />
                     <span className="text-slate-800">
-                      <strong className="text-indigo-700">OCR</strong> — bez AI
+                      <strong className="text-indigo-700">OCR</strong> — jen sken bez textu
                     </span>
                   </label>
                   <label className="inline-flex cursor-pointer items-center gap-2">
@@ -2142,8 +2226,10 @@ export default function ReviewPage() {
                   </label>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                  {extractMode === "ocr"
-                    ? "Tesseract + kotvy cen. Bez API klíče."
+                  {extractMode === "layout"
+                    ? "Čte vestavěný text PDF (stejně jako dávky). Náhled A4 je jen pro oči. Tesseract se nespouští."
+                    : extractMode === "ocr"
+                    ? "Tesseract — jen když PDF nemá textovou vrstvu."
                     : extractMode === "vision"
                       ? "OpenAI / Gemini dle .env — bez klíče ukázková data."
                       : "OCR bloky → Ollama normalizace do tvého JSON schématu."}
@@ -2175,7 +2261,9 @@ export default function ReviewPage() {
                   >
                     {busy
                       ? extractPhase ?? "Zpracovávám…"
-                      : extractMode === "ocr"
+                      : extractMode === "layout"
+                        ? "Číst PDF text"
+                        : extractMode === "ocr"
                         ? "Spustit OCR"
                         : extractMode === "vision"
                           ? "Spustit vision"
@@ -2223,7 +2311,7 @@ export default function ReviewPage() {
                         {kind === "pdf" && pdfPageCount != null ? ` / ${pdfPageCount}` : ""}
                       </span>
                       <span className="rounded-full bg-white/10 px-2.5 py-1 font-medium text-white/85 ring-1 ring-white/15">
-                        Režim: {extractMode === "ocr" ? "OCR" : extractMode === "vision" ? "Vision" : "Local LLM"}
+                        Režim: {extractMode === "layout" ? "PDF text" : extractMode === "ocr" ? "OCR" : extractMode === "vision" ? "Vision" : "Local LLM"}
                       </span>
                     </div>
                   </div>

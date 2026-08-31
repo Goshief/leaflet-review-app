@@ -255,6 +255,13 @@ async function main() {
       postOcr.indexOf("requireOperatorApi") < postOcr.indexOf("formData"),
       "ocr: guard before form"
     );
+
+    const pdfText = readSrc("app/api/parse-leaflet-page/route.ts");
+    const postPdfText = pdfText.slice(pdfText.indexOf("export async function POST"));
+    assert.ok(
+      postPdfText.indexOf("requireOperatorApi") < postPdfText.indexOf("req.json"),
+      "pdf-text: guard before json"
+    );
   }
 
   // 17) user_metadata.role=admin without app_metadata.role → 403

@@ -76,6 +76,7 @@ export const API_ACCESS_MATRIX: ApiAccessRule[] = [
   { file: "app/api/intake-file/route.ts", methods: { GET: "operator" } },
   { file: "app/api/extract/route.ts", methods: { POST: "operator" } },
   { file: "app/api/ocr-lidl-page/route.ts", methods: { POST: "operator" } },
+  { file: "app/api/parse-leaflet-page/route.ts", methods: { POST: "operator" } },
   { file: "app/api/parse-lidl-page/route.ts", methods: { POST: "operator" } },
   { file: "app/api/normalize/route.ts", methods: { POST: "operator" } },
   { file: "app/api/import-offers/route.ts", methods: { POST: "operator" } },

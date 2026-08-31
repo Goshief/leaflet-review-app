@@ -44,7 +44,7 @@ export function UploadForm() {
   const [meta, setMeta] = useState("");
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [mode, setMode] = useState<"file" | "excel">("file"); // krok 1: zdroj
-  const [method, setMethod] = useState<"ocr" | "vision" | "local" | "manual">("ocr"); // krok 3
+  const [method, setMethod] = useState<"layout" | "ocr" | "vision" | "local" | "manual">("layout"); // krok 3
   const [excelText, setExcelText] = useState(manualImportText);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [verifyBusy, setVerifyBusy] = useState(false);
@@ -53,7 +53,7 @@ export function UploadForm() {
 
   useEffect(() => {
     // Když je zdroj excel, jediný validní způsob je ruční import.
-    setMethod(mode === "excel" ? "manual" : "ocr");
+    setMethod(mode === "excel" ? "manual" : "layout");
     setStep(1);
   }, [mode]);
 
@@ -384,6 +384,21 @@ export function UploadForm() {
               <button
                 type="button"
                 disabled={mode === "excel"}
+                onClick={() => setMethod("layout")}
+                className={
+                  method === "layout"
+                    ? "rounded-3xl border border-indigo-600 bg-indigo-600 px-5 py-4 text-left text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+                    : "rounded-3xl border border-slate-200 bg-white px-5 py-4 text-left text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+                }
+              >
+                PDF text
+                <div className={method === "layout" ? "mt-1 text-xs text-white/80" : "mt-1 text-xs text-slate-500"}>
+                  Vestavěný text PDF, stejný parser jako dávky. Výchozí pro BILLA.
+                </div>
+              </button>
+              <button
+                type="button"
+                disabled={mode === "excel"}
                 onClick={() => setMethod("ocr")}
                 className={
                   method === "ocr"
@@ -393,7 +408,7 @@ export function UploadForm() {
               >
                 OCR
                 <div className={method === "ocr" ? "mt-1 text-xs text-white/80" : "mt-1 text-xs text-slate-500"}>
-                  Lokální OCR (Tesseract). Bez API klíče.
+                  Tesseract — jen sken bez textové vrstvy.
                 </div>
               </button>
               <button

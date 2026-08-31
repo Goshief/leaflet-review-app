@@ -3,7 +3,8 @@
 import { LeafletA4Viewer } from "@/components/leaflet/a4-viewer";
 import { useLeafletPreview } from "@/components/leaflet/preview-context";
 import { leafletOffersToCsv } from "@/lib/leaflet/offers-csv";
-import { getPdfPageCount, renderPdfPageToPngFile } from "@/lib/pdf/render-page";
+import { extractPdfPageWords } from "@/lib/pdf/render-page";
+import { pdfTextLayerLooksUsable } from "@/lib/pdf/text-words";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -19,19 +20,20 @@ export default function LetakA4Page() {
     if (!file) return;
     setError("");
     try {
-      const count = await getPdfPageCount(file);
+      const { numPages: count } = await extractPdfPageWords(file, 1);
       const rows: Array<Record<string, unknown>> = [];
       for (let page = 1; page <= count; page += 1) {
-        setReading(`Převádím stranu ${page}/${count} na A4 obrázek a čtu ji…`);
-        const image = await renderPdfPageToPngFile(file, page);
-        const body = new FormData();
-        body.append("file", image);
-        body.append("page_no", String(page));
-        body.append("store_id", preview.retailer);
-        const response = await fetch("/api/extract", {
+        setReading(`Čtu textovou vrstvu strany ${page}/${count}…`);
+        const { words } = await extractPdfPageWords(file, page);
+        if (!pdfTextLayerLooksUsable(words)) {
+          rows.push({ page_no: page, notes: "strana bez PDF textu", extracted_name: "CHYBA ČTENÍ" });
+          continue;
+        }
+        const response = await fetch("/api/parse-leaflet-page", {
           method: "POST",
-          body,
-          signal: AbortSignal.timeout(100_000),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ words, page_no: page, store_id: preview.retailer }),
+          signal: AbortSignal.timeout(60_000),
         });
         const data = await response.json().catch(() => null);
         if (!response.ok) {
@@ -82,7 +84,7 @@ export default function LetakA4Page() {
         <li className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-indigo-600">2</p>
           <p className="mt-1 font-semibold">Číst stranu po straně</p>
-          <p className="mt-1 text-sm text-slate-600">OCR/vision jen na ten obrázek, ne na celý leták.</p>
+          <p className="mt-1 text-sm text-slate-600">Náhled A4. Parser čte text PDF, ne Tesseract z JPEG.</p>
         </li>
         <li className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-indigo-600">3</p>

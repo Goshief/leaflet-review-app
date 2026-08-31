@@ -1,3 +1,6 @@
+import { textItemsToOcrWords } from "./text-words";
+import type { OcrWord } from "../ocr/types";
+
 /**
  * Klient-side vykreslení jedné stránky PDF do PNG (pro OpenAI vision).
  * Spouštěj jen v prohlížeči (canvas).
@@ -70,6 +73,21 @@ export async function loadPdfDocument(file: File) {
   const pdfjs = await getPdfjs();
   const data = await file.arrayBuffer();
   return pdfjs.getDocument({ data }).promise;
+}
+
+export async function extractPdfPageWords(
+  file: File,
+  pageNumber1Based: number
+): Promise<{ words: OcrWord[]; text: string; numPages: number }> {
+  const pdf = await loadPdfDocument(file);
+  const n = pdf.numPages;
+  if (pageNumber1Based < 1 || pageNumber1Based > n) {
+    throw new Error(`Stránka ${pageNumber1Based} není v rozsahu 1–${n}.`);
+  }
+  const page = await pdf.getPage(pageNumber1Based);
+  const content = await page.getTextContent();
+  const { words, text } = textItemsToOcrWords(content.items);
+  return { words, text, numPages: n };
 }
 
 export async function renderLoadedPdfPage(
