@@ -1,6 +1,6 @@
-import type { BBox, OcrWord, PriceAnchor } from "./types";
-import { DEFAULT_PRICE_WINDOW } from "./types";
-import { parsePriceText } from "./price-parse";
+import type { BBox, OcrWord, PriceAnchor } from "./types.ts";
+import { DEFAULT_PRICE_WINDOW } from "./types.ts";
+import { parsePriceText } from "./price-parse.ts";
 
 function wordBBox(w: OcrWord): BBox {
   return { x0: w.x, y0: w.y, x1: w.x + w.w, y1: w.y + w.h };

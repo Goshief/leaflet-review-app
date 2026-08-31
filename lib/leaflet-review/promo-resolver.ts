@@ -1,6 +1,6 @@
-import type { OcrWord } from "@/lib/ocr/types";
-import type { ExtractedCandidate } from "./extractor";
-import { applyCandidateQuality } from "./quality-resolver";
+import type { OcrWord } from "../ocr/types.ts";
+import type { ExtractedCandidate } from "./extractor.ts";
+import { applyCandidateQuality } from "./quality-resolver.ts";
 
 type PromoMatch={minimum_quantity:number;raw:string;source:"nearby_product_block_text"};
 function inExpandedBox(w:OcrWord,b:{x:number;y:number;width:number;height:number}){const cx=w.x+w.w/2,cy=w.y+w.h/2;return cx>=b.x-20&&cx<=b.x+b.width+20&&cy>=b.y-26&&cy<=b.y+b.height+18;}
