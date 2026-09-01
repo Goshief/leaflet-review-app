@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
           image_storage_path: String(stored.image_storage_path),
         });
         const disk = await pagesBackend.getPageImage(String(stored.image_storage_path));
-        if (disk?.byteLength) pageImage = disk;
+        if (disk?.byteLength) pageImage = Uint8Array.from(disk);
         const staged = await parser.listStagingByPage(page.page_id);
         if (staged.length) existing = staged.map((row) => asOffer(row as unknown as Record<string, unknown>, page));
       }

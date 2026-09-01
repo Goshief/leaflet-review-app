@@ -15,7 +15,7 @@ type CanvasAndContext = {
 class NapiCanvasFactory {
   create(width: number, height: number): CanvasAndContext {
     const canvas = createCanvas(Math.max(1, Math.ceil(width)), Math.max(1, Math.ceil(height)));
-    return { canvas, context: canvas.getContext("2d") };
+    return { canvas: canvas as never, context: canvas.getContext("2d") };
   }
   reset(pair: CanvasAndContext, width: number, height: number) {
     pair.canvas.width = Math.max(1, Math.ceil(width));
@@ -35,10 +35,10 @@ async function loadPdfDocument(bytes: Uint8Array) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   return pdfjs.getDocument({
     data: Uint8Array.from(bytes),
-    canvasFactory: new NapiCanvasFactory() as never,
+    canvasFactory: new NapiCanvasFactory(),
     disableFontFace: true,
     isEvalSupported: false,
-  }).promise;
+  } as never).promise;
 }
 
 /**

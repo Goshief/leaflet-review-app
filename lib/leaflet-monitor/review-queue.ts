@@ -87,7 +87,7 @@ export function unreviewedPointers(leaflets: ReviewLeafletSnapshot[]): QueuePoin
     }
   }
   return out.sort((a, b) => {
-    const time = Date.parse(b.downloaded_at || 0) - Date.parse(a.downloaded_at || 0);
+    const time = Date.parse(b.downloaded_at || "") - Date.parse(a.downloaded_at || "");
     if (time !== 0) return time;
     if (a.batch_id !== b.batch_id) return a.batch_id < b.batch_id ? -1 : 1;
     return a.page_no - b.page_no;
@@ -206,7 +206,7 @@ export function uniquePagePointers(
     });
   }
   return [...byPage.values()].sort((a, b) => {
-    const time = Date.parse(b.downloaded_at || 0) - Date.parse(a.downloaded_at || 0);
+    const time = Date.parse(b.downloaded_at || "") - Date.parse(a.downloaded_at || "");
     if (time !== 0) return time;
     if (a.batch_id !== b.batch_id) return a.batch_id < b.batch_id ? -1 : 1;
     return a.page_no - b.page_no;

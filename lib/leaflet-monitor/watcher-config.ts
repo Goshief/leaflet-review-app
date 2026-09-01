@@ -9,13 +9,13 @@ export const WATCHER_ASSET_LIMIT = 12;
 
 /**
  * Vercel Cron expressions (UTC). Keep in sync with vercel.json leaflet fetch crons.
- * Tick every 2 hours; LEAFLET_WATCHER_INTERVAL_HOURS can skip extra ticks.
+ * Hobby allows one tick per day; in-app LEAFLET_WATCHER_INTERVAL_HOURS can skip extra ticks.
  */
 export const WATCHER_CRON_SCHEDULES: Record<WatchedRetailerId, string> = {
-  kaufland: "13 */2 * * *",
-  lidl: "17 */2 * * *",
-  penny: "23 */2 * * *",
-  billa: "29 */2 * * *",
+  kaufland: "13 7 * * *",
+  lidl: "17 7 * * *",
+  penny: "23 7 * * *",
+  billa: "29 7 * * *",
 };
 
 export function isWatchedRetailer(id: string): id is WatchedRetailerId {
