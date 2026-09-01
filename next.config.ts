@@ -48,7 +48,7 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
   outputFileTracingRoot: path.resolve(__dirname),
-  serverExternalPackages: ["tesseract.js", "pdfjs-dist", "pg"],
+  serverExternalPackages: ["tesseract.js", "pdfjs-dist", "pg", "@napi-rs/canvas"],
   // pdfjs-dist and tesseract.js load worker/runtime files dynamically on Node.
   // Vercel tracing cannot discover those relative runtime requires reliably,
   // so include them explicitly in every serverless OCR route that uses them.

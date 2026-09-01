@@ -1,5 +1,6 @@
 import { extractLeafletCandidates } from "./extractor.ts";
 import { applyPromoEvidence } from "./promo-resolver.ts";
+import { applyVariantEvidence } from "./variant-resolver.ts";
 import { candidatesToLidlOffers, type LidlOfferWithOcrCrop } from "../ocr/to-lidl-offer.ts";
 import { findPriceAnchors } from "../ocr/price-anchors.ts";
 import type { OcrWord } from "../ocr/types.ts";
@@ -28,7 +29,7 @@ export function parseLeafletPageFromPdfText(
     pageNo,
     validFrom: dates.valid_from,
     validTo: dates.valid_to,
-  }).map((c) => applyPromoEvidence(c, words));
+  }).map((c) => applyPromoEvidence(applyVariantEvidence(c), words));
 
   const offers = candidatesToLidlOffers(candidates, page_no, store_id, () => null);
   const staged = applyBillaStaging(offers, {

@@ -3,6 +3,10 @@ import { requireOperatorApi } from "@/lib/auth/guards";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { mapOffersForImportRun } from "@/lib/import-run/map-offers";
 import { extractLeafletCandidates } from "@/lib/leaflet-review/extractor";
+import { applyBrandAliases, loadBrandAliases } from "@/lib/leaflet-review/brand-resolver";
+import { applyVariantEvidence } from "@/lib/leaflet-review/variant-resolver";
+import { applyPromoEvidence } from "@/lib/leaflet-review/promo-resolver";
+import { mergeRereadKeepingManualEdits } from "@/lib/leaflet-review/reread-merge";
 import type { OcrWord } from "@/lib/ocr/types";
 
 export const runtime = "nodejs";
@@ -134,19 +138,24 @@ async function rereadSingleCandidate(s: any, item: any, docRow: any) {
   if (downloadError || !pdfBlob) throw new Error(downloadError?.message || "PDF nebylo nalezeno.");
 
   const bytes = new Uint8Array(await pdfBlob.arrayBuffer());
+  const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+  (globalThis as typeof globalThis & { pdfjsWorker?: unknown }).pdfjsWorker = {
+    WorkerMessageHandler: worker.WorkerMessageHandler,
+  };
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const task = pdfjs.getDocument({ data: bytes });
+  const task = pdfjs.getDocument({ data: bytes.slice() });
   const pdf = await task.promise;
   try {
     const allWords = await readPageWords(pdf, Number(item.page_no));
     const scopedWords = allWords.filter((w) => overlapsExpandedBox(w, item.source_bbox));
     if (!scopedWords.length) throw new Error("Ve zdrojové oblasti položky nebyl nalezen žádný text.");
 
+    const brandAliases = await loadBrandAliases(s);
     const extracted = extractLeafletCandidates(scopedWords, {
       pageNo: Number(item.page_no),
       validFrom: docRow.valid_from ?? item.leaflet_valid_from ?? null,
       validTo: docRow.valid_to ?? item.leaflet_valid_to ?? null,
-    });
+    }).map((c) => applyPromoEvidence(applyVariantEvidence(applyBrandAliases(c, brandAliases)), allWords));
     if (!extracted.length) throw new Error("Zdrojový blok po novém čtení nevytvořil žádného doložitelného kandidáta.");
 
     const originalCenter = bboxCenter(item.source_bbox);
@@ -159,10 +168,11 @@ async function rereadSingleCandidate(s: any, item: any, docRow: any) {
       const bp = item.price_sale != null && b.price_sale != null ? Math.abs(Number(item.price_sale) - Number(b.price_sale)) : 0;
       return (ad + ap * 12) - (bd + bp * 12);
     })[0]!;
+    const merged = mergeRereadKeepingManualEdits(chosen as unknown as Record<string, unknown>, item);
 
     const patch: Record<string, unknown> = {};
-    for (const key of REREAD_FIELDS) patch[key] = chosen[key];
-    patch.status = chosen.status;
+    for (const key of REREAD_FIELDS) patch[key] = merged[key];
+    patch.status = merged.status;
     patch.revision = Number(item.revision || 1) + 1;
     patch.reread_count = Number(item.reread_count || 0) + 1;
     patch.last_reread_at = new Date().toISOString();

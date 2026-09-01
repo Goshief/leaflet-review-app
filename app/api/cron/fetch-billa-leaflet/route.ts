@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runLeafletConnectorWithOrigin } from "@/lib/leaflet-monitor/connector-with-origin";
 import { getRetailerConfig } from "@/lib/leaflet-monitor/retailers";
+import { getWatcherCronSchedule } from "@/lib/leaflet-monitor/watcher-config";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { processLeafletPdf } from "@/lib/leaflet-review/processor";
 
@@ -58,7 +59,7 @@ export async function GET(req: Request) {
   return runLeafletConnectorWithOrigin(req, {
     retailer: retailer.id,
     sourcePage: retailer.fetch_url,
-    cronSchedule: "29 7 * * *",
+    cronSchedule: getWatcherCronSchedule("billa"),
     preferredLabels: [/Velký leták/i, /Stáhnout PDF/i, /aktuální leták/i],
     autoProcess: true,
   });

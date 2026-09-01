@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReviewOfferRow } from "@/components/review/offers-table";
+import { loyaltyProgramLabel } from "@/lib/leaflet/retailer-adapter";
 import { useEffect, useState } from "react";
 
 /* eslint-disable react-hooks/set-state-in-effect */
@@ -19,7 +20,7 @@ export function EditProductSheet({
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [standard, setStandard] = useState("");
-  const [loyalty, setLoyalty] = useState("");
+  const [loyaltyPrice, setLoyaltyPrice] = useState("");
   const [hasLoyalty, setHasLoyalty] = useState(false);
   const [packQty, setPackQty] = useState("");
   const [packUnit, setPackUnit] = useState("");
@@ -32,7 +33,7 @@ export function EditProductSheet({
     setName(offer.extracted_name ?? "");
     setPrice(offer.price_total != null ? String(offer.price_total) : "");
     setStandard(offer.price_standard != null ? String(offer.price_standard) : "");
-    setLoyalty(
+    setLoyaltyPrice(
       offer.price_with_loyalty_card != null
         ? String(offer.price_with_loyalty_card)
         : ""
@@ -44,6 +45,8 @@ export function EditProductSheet({
     setPackUnknown((offer.pack_unit ?? "").toString().trim().toLowerCase() === "unknown");
     setNotes(offer.notes ?? "");
   }, [offer]);
+
+  const loyaltyLabel = loyaltyProgramLabel(offer?.store_id);
 
   if (!open) return null;
 
@@ -102,17 +105,17 @@ export function EditProductSheet({
             </div>
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Lidl Plus cena
+                {loyaltyLabel}
               </label>
               <input
                 className={field}
-                value={loyalty}
-                onChange={(e) => setLoyalty(e.target.value)}
+                value={loyaltyPrice}
+                onChange={(e) => setLoyaltyPrice(e.target.value)}
                 disabled={!hasLoyalty}
               />
             </div>
             <div className="flex gap-4 text-sm">
-              <span className="text-slate-600">Má Lidl Plus cenu?</span>
+              <span className="text-slate-600">Má cenu {loyaltyLabel}?</span>
               <label className="inline-flex items-center gap-1.5">
                 <input
                   type="radio"
@@ -208,7 +211,7 @@ export function EditProductSheet({
                 if (!offer) return;
                 const pt = parseFloat(price.replace(",", "."));
                 const ps = standard.trim() ? parseFloat(standard.replace(",", ".")) : NaN;
-                const pl = loyalty.trim() ? parseFloat(loyalty.replace(",", ".")) : NaN;
+                const pl = loyaltyPrice.trim() ? parseFloat(loyaltyPrice.replace(",", ".")) : NaN;
                 const pq = packQty.trim() ? parseFloat(packQty.replace(",", ".")) : NaN;
                 const psz = packSize.trim() ? parseFloat(packSize.replace(",", ".")) : NaN;
                 onSave({

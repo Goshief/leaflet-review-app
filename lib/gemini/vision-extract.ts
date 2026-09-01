@@ -34,6 +34,7 @@ export async function geminiVisionExtractText(params: {
   userText: string;
   imageBase64: string;
   mimeType: string;
+  extraImages?: Array<{ base64: string; mimeType: string }>;
 }): Promise<GeminiVisionResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     params.model
@@ -52,6 +53,12 @@ export async function geminiVisionExtractText(params: {
               data: params.imageBase64,
             },
           },
+          ...(params.extraImages ?? []).map((image) => ({
+            inline_data: {
+              mime_type: image.mimeType,
+              data: image.base64,
+            },
+          })),
         ],
       },
     ],

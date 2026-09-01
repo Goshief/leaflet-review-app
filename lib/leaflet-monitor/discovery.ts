@@ -1,4 +1,4 @@
-import type { RetailerId } from "@/lib/leaflet-monitor/learning";
+import type { RetailerId } from "./learning";
 
 export type LeafletAsset = {
   url: string;

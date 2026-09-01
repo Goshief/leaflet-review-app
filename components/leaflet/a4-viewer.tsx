@@ -6,10 +6,12 @@ import { loadPdfDocument, renderLoadedPdfPage } from "@/lib/pdf/render-page";
 type Props = {
   file: File;
   title?: string;
+  compact?: boolean;
   onReadPage?: (pageNo: number) => void;
+  onPageChange?: (pageNo: number, imageUrl: string | null) => void;
 };
 
-export function LeafletA4Viewer({ file, title, onReadPage }: Props) {
+export function LeafletA4Viewer({ file, title, compact, onReadPage, onPageChange }: Props) {
   const [pageCount, setPageCount] = useState(0);
   const [page, setPage] = useState(1);
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
@@ -22,8 +24,8 @@ export function LeafletA4Viewer({ file, title, onReadPage }: Props) {
   const pageRef = useRef(1);
 
   useEffect(() => {
-    pageRef.current = page;
-  }, [page]);
+    onPageChange?.(page, currentUrl);
+  }, [page, currentUrl, onPageChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,7 +130,7 @@ export function LeafletA4Viewer({ file, title, onReadPage }: Props) {
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-950 text-white shadow-sm">
       <div className="flex items-center justify-between gap-3 px-5 py-3 text-sm text-slate-300">
-        <p className="truncate font-semibold">{title || file.name}</p>
+        <p className="whitespace-normal break-words font-semibold">{title || file.name}</p>
         <p className="shrink-0 font-mono text-xs">{pageCount ? `${page}/${pageCount}` : "—"}</p>
       </div>
 
@@ -136,7 +138,7 @@ export function LeafletA4Viewer({ file, title, onReadPage }: Props) {
         {busy ? <p className="px-5 py-24 text-center text-slate-400">{busy}</p> : null}
         {error ? <p className="px-5 py-24 text-center text-rose-300">{error}</p> : null}
         {currentUrl && !busy ? (
-          <img src={currentUrl} alt={`Leták strana ${page}`} className="mx-auto max-h-[78vh] w-auto max-w-full object-contain" />
+          <img src={currentUrl} alt={`Leták strana ${page}`} className={compact ? "mx-auto max-h-[min(72vh,860px)] w-auto max-w-full object-contain" : "mx-auto max-h-[78vh] w-auto max-w-full object-contain"} />
         ) : null}
 
         <button
@@ -193,7 +195,7 @@ export function LeafletA4Viewer({ file, title, onReadPage }: Props) {
         </div>
         {onReadPage ? (
           <button type="button" onClick={() => onReadPage(page)} className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-bold">
-            Číst stranu {page} jako my
+            Číst stranu {page} AI parserem
           </button>
         ) : null}
       </div>
