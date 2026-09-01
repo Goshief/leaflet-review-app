@@ -7,6 +7,8 @@ import { resolveViewerPageManifest } from "@/lib/leaflet-monitor/page-manifest";
 import { processLeafletPdf } from "@/lib/leaflet-review/processor";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { RetailerId } from "@/lib/leaflet-monitor/learning";
+import { createSupabasePdfIntakeBackend, ingestOriginalPdf } from "@/lib/leaflet-monitor/pdf-intake";
+import { ensurePagesAfterDownloadAndParse } from "@/lib/leaflet-monitor/page-parser";
 
 type ConnectorConfig = {
   retailer: RetailerId;
@@ -128,6 +130,19 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
 
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const shortSha = sha256.slice(0, 16);
+  const archive = await ingestOriginalPdf(createSupabasePdfIntakeBackend(supabase), {
+    store_id: "lidl",
+    source_url: assetUrl,
+    pdf_source_url: pdfUrl,
+    bytes,
+    content_type: "application/pdf",
+  });
+  let page_split: unknown = null;
+  try {
+    page_split = await ensurePagesAfterDownloadAndParse(supabase, archive, bytes);
+  } catch (error) {
+    page_split = { pages: [], batch_status: "pages_failed", error: error instanceof Error ? error.message : String(error) };
+  }
   const { data: existing, error: existingError } = await supabase
     .from("leaflet_documents")
     .select("id,storage_path,filename,processing_status,approved_count,created_at")
@@ -157,26 +172,31 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
   }
 
   const alreadyReady = existing && ["ready_for_review", "partially_reviewed", "completed"].includes(String(existing.processing_status));
-  const processing = alreadyReady
-    ? existing
-    : await processLeafletPdf({
-        supabase,
-        bucket: BUCKET,
-        path: storagePath,
-        retailer: "lidl",
-        sourceUrl: pdfUrl,
-        bytes,
-        force: false,
-      });
+  const processing = archive.status === "duplicate"
+    ? existing ?? null
+    : alreadyReady
+      ? existing
+      : await processLeafletPdf({
+          supabase,
+          bucket: BUCKET,
+          path: storagePath,
+          retailer: "lidl",
+          sourceUrl: pdfUrl,
+          bytes,
+          force: false,
+        });
 
   return {
     pdf_url: pdfUrl,
     sha256,
     bytes: bytes.byteLength,
     storage_path: storagePath,
+    pdf_storage_path: archive.pdf_storage_path,
     storage_mode: storageMode,
     storage_warning: storageWarning,
-    duplicate_prevented: Boolean(existing),
+    duplicate_prevented: Boolean(existing) || archive.status === "duplicate",
+    pdf_intake: archive,
+    page_split,
     processing,
   };
 }
@@ -208,12 +228,25 @@ export async function runLeafletConnectorWithOrigin(req: Request, config: Connec
     let pdf_fallback: unknown = null;
     let page_processing: unknown = null;
 
+    let extra_processing: unknown[] = [];
+    const extraViewerUrls = Array.isArray(payload.new_viewer_assets)
+      ? payload.new_viewer_assets.filter((url): url is string => typeof url === "string" && url.length > 0 && url !== assetUrl)
+      : [];
+
     if (config.retailer === "lidl" && assetUrl) {
       pdf_fallback = await recoverLidlPdf(supabase, assetUrl);
     }
 
     if (VIEWER_RETAILERS.has(config.retailer) && assetUrl && !pdf_fallback) {
       page_processing = await ingestViewerPages(supabase, config.retailer, assetUrl);
+    }
+
+    for (const url of extraViewerUrls) {
+      if (config.retailer === "lidl") {
+        extra_processing.push({ url, pdf_fallback: await recoverLidlPdf(supabase, url) });
+      } else if (VIEWER_RETAILERS.has(config.retailer)) {
+        extra_processing.push({ url, page_processing: await ingestViewerPages(supabase, config.retailer, url) });
+      }
     }
 
     return NextResponse.json({
@@ -229,6 +262,7 @@ export async function runLeafletConnectorWithOrigin(req: Request, config: Connec
       origin,
       pdf_fallback,
       page_processing,
+      extra_processing: extra_processing.length ? extra_processing : undefined,
     });
   } catch (error) {
     return NextResponse.json({

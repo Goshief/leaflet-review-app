@@ -11,11 +11,15 @@ import {
 import type { ReviewOfferRow } from "@/components/review/offers-table";
 import { useLeafletPreview } from "@/components/leaflet/preview-context";
 import { getReviewEmptyState } from "@/lib/review/empty-state";
+import { downloadLeafletOffersCsv, downloadLeafletOffersJson } from "@/lib/leaflet/offers-csv";
+import { retailerLabel } from "@/lib/leaflet/guess-retailer";
 import {
   getPdfPageCount,
   renderPdfPageToPngBlob,
   renderPdfPageToPngFile,
+  extractPdfPageWords,
 } from "@/lib/pdf/render-page";
+import { pdfTextLayerLooksUsable } from "@/lib/pdf/text-words";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,7 +31,7 @@ type ApiSuccess = {
   model: string;
   page_no: number | null;
   source_url: string | null;
-  mode?: "ocr";
+  mode?: "ocr" | "pdf_text";
   ocr_raw?: {
     word_count: number;
     words: Array<{ text: string; x: number; y: number; w: number; h: number }>;
@@ -45,6 +49,8 @@ type ApiErrorBody = {
   raw_model_output?: string;
   detail?: string;
 };
+
+type ExtractMode = "layout" | "ocr" | "vision" | "local";
 
 type ApprovedValidationIssue = {
   flatIndex: number;
@@ -134,6 +140,7 @@ export default function ReviewPage() {
     blobUrl,
     kind,
     sourceUrl,
+    retailer,
     setSourceUrl,
     setFromFile,
     startManualImport,
@@ -149,7 +156,8 @@ export default function ReviewPage() {
   const [model, setModel] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [rawOut, setRawOut] = useState<string | null>(null);
-  const [extractMode, setExtractMode] = useState<"ocr" | "vision" | "local">("ocr");
+  const [extractMode, setExtractMode] = useState<ExtractMode>("layout");
+  const [extractPhase, setExtractPhase] = useState<string | null>(null);
   const [ocrDump, setOcrDump] = useState<ApiSuccess["ocr_raw"] | null>(null);
   const [manualText, setManualText] = useState("");
   const [commitBusy, setCommitBusy] = useState(false);
@@ -397,11 +405,12 @@ export default function ReviewPage() {
       if (typeof s.pageNo === "number" && s.pageNo >= 1) setPageNo(s.pageNo);
       if (typeof s.sourceUrl === "string") setSourceUrl(s.sourceUrl);
       if (
+        s.extractMode === "layout" ||
         s.extractMode === "ocr" ||
         s.extractMode === "vision" ||
         s.extractMode === "local"
       ) {
-        setExtractMode(s.extractMode);
+        setExtractMode(s.extractMode === "ocr" ? "layout" : s.extractMode);
       }
       if (typeof s.model === "string") setModel(s.model);
       if (typeof s.manualText === "string") setManualText(s.manualText);
@@ -608,7 +617,7 @@ export default function ReviewPage() {
     if (typeof window === "undefined") return;
     const p = new URLSearchParams(window.location.search);
     const e = (p.get("extract") ?? "").trim();
-    if (e === "ocr" || e === "vision" || e === "local") setExtractMode(e);
+    if (e === "layout" || e === "ocr" || e === "vision" || e === "local") setExtractMode(e);
   }, []);
 
   useEffect(() => {
@@ -634,6 +643,14 @@ export default function ReviewPage() {
       cancel = true;
     };
   }, [kind, file]);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("letak-page");
+    if (!raw) return;
+    const n = Number(raw);
+    sessionStorage.removeItem("letak-page");
+    if (Number.isFinite(n) && n >= 1) setPageNo(Math.floor(n));
+  }, []);
 
   useEffect(() => {
     if (kind !== "pdf" || !file || !pdfPageCount) {
@@ -794,7 +811,12 @@ export default function ReviewPage() {
 
   const runExtract = useCallback(async () => {
     if (!file) return;
+    const extractSignal =
+      typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+        ? AbortSignal.timeout(100_000)
+        : undefined;
     setBusy(true);
+    setExtractPhase("Připravuji stránku…");
     setErr(null);
     setRawOut(null);
     setOffersByPage((prev) => ({ ...(prev ?? {}), [pageNo]: [] }));
@@ -802,30 +824,111 @@ export default function ReviewPage() {
     setModel(null);
     setOcrDump(null);
     try {
-      let upload: File;
       let metaPage = pageNo;
+      if (kind === "pdf" && pdfPageCount) {
+        metaPage = Math.min(Math.max(1, pageNo), pdfPageCount);
+      } else if (kind === "pdf" && !pdfPageCount) {
+        setErr("PDF se ještě načítá, počkej na počet stran.");
+        setBusy(false);
+        setExtractPhase(null);
+        return;
+      }
+
+      if (kind === "pdf" && extractMode === "layout") {
+        setExtractPhase("Čtu textovou vrstvu PDF…");
+        const { words } = await extractPdfPageWords(file, metaPage);
+        if (!pdfTextLayerLooksUsable(words)) {
+          const msg =
+            "Tato strana nemá použitelnou textovou vrstvu (sken). Zapni Vision, nebo OCR jen pro sken.";
+          setErr(msg);
+          toast.error("Parser", msg);
+          return;
+        }
+        const res = await fetch("/api/parse-leaflet-page", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            words,
+            page_no: metaPage,
+            store_id: retailer,
+            source_url: sourceUrl.trim() || null,
+          }),
+          signal: extractSignal,
+        });
+        const data = (await res.json()) as ApiSuccess | ApiErrorBody;
+        if (!res.ok) {
+          const e = data as ApiErrorBody;
+          const msg = e.error || `HTTP ${res.status}`;
+          setErr(msg);
+          toast.error("Parser selhal", msg.slice(0, 180));
+          return;
+        }
+        const ok = data as ApiSuccess;
+        if (ok.ok) {
+          const stamped = ok.offers.map((row) => ({
+            ...row,
+            store_id: row.store_id && row.store_id !== "lidl" ? row.store_id : retailer,
+          }));
+          setOffersByPage((prev) => ({ ...(prev ?? {}), [metaPage]: stamped }));
+          setRowStatusByPage((prev) => ({
+            ...prev,
+            [metaPage]: Object.fromEntries(stamped.map((_, i) => [i, "pending" as const])) as Record<
+              number,
+              RowReviewStatus
+            >,
+          }));
+          setModel(ok.model);
+          setOcrDump(ok.ocr_raw ?? null);
+          downloadLeafletOffersCsv(
+            stamped.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
+            `${(fileName || "letak").replace(/\.pdf$/i, "")}-strana-${metaPage}.csv`
+          );
+          toast.success(
+            `Strana ${metaPage}`,
+            stamped.length ? `${stamped.length} produktů z PDF textu` : "Parser doběhl, ale nenašel žádný produkt"
+          );
+        }
+        return;
+      }
+
+      let upload: File;
       if (kind === "image") {
         upload = file;
       } else if (kind === "pdf" && pdfPageCount) {
-        const p = Math.min(Math.max(1, pageNo), pdfPageCount);
-        metaPage = p;
-        upload = await renderPdfPageToPngFile(file, p);
+        const p = metaPage;
+        if (pdfPreviewUrl && p === pageNo) {
+          setExtractPhase("Beru vykreslený náhled…");
+          const blob = await fetch(pdfPreviewUrl).then((r) => r.blob());
+          const ext = blob.type === "image/png" ? "png" : "jpg";
+          upload = new File(
+            [blob],
+            `${(fileName || "letak").replace(/\.pdf$/i, "")}-p${p}.${ext}`,
+            { type: blob.type || "image/jpeg" }
+          );
+        } else {
+          setExtractPhase("Vykresluji stranu do obrázku…");
+          upload = await renderPdfPageToPngFile(file, p);
+        }
       } else {
         setErr("PDF se ještě načítá, počkej na počet stran.");
         setBusy(false);
+        setExtractPhase(null);
         return;
       }
 
       const fd = new FormData();
       fd.append("file", upload);
       fd.append("page_no", String(metaPage));
+      fd.append("store_id", retailer);
       if (sourceUrl.trim()) fd.append("source_url", sourceUrl.trim());
+      setExtractPhase("OCR na serveru — může trvat až 90 s…");
 
       if (extractMode === "local") {
         // OCR (zdarma) -> Local LLM (Ollama) -> Lidl JSON schéma
         const extractRes = await fetch("/api/extract", {
           method: "POST",
           body: fd,
+          signal: extractSignal,
         });
         const extractData = await extractRes.json();
         if (!extractRes.ok) {
@@ -876,6 +979,7 @@ export default function ReviewPage() {
         // Zachovej OCR crop z /api/extract, aby bylo vidět "fotky/výřezy".
         const merged = normalizedOffers.map((o, i) => ({
           ...o,
+          store_id: o.store_id && o.store_id !== "lidl" ? o.store_id : retailer,
           ocr_crop_bbox: extractedOffers[i]?.ocr_crop_bbox ?? null,
         }));
 
@@ -889,14 +993,20 @@ export default function ReviewPage() {
         }));
         setModel(normalizeData.model ?? "ollama");
         if (normalizeData.raw_model_output) setRawOut(normalizeData.raw_model_output);
+        downloadLeafletOffersCsv(
+          merged.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
+          `${(fileName || "letak").replace(/\.pdf$/i, "")}-strana-${metaPage}.csv`
+        );
+        toast.success(`Strana ${metaPage}`, `${merged.length} produktů z parseru`);
         return;
       }
 
       const endpoint =
-        extractMode === "ocr" ? "/api/ocr-lidl-page" : "/api/parse-lidl-page";
+        extractMode === "vision" ? "/api/parse-lidl-page" : "/api/ocr-lidl-page";
       const res = await fetch(endpoint, {
         method: "POST",
         body: fd,
+        signal: extractSignal,
       });
       const data = (await res.json()) as ApiSuccess | ApiErrorBody;
 
@@ -910,29 +1020,50 @@ export default function ReviewPage() {
           msg += ` (${e.detail.slice(0, 200)})`;
         }
         setErr(msg);
+        toast.error("Parser selhal", msg.slice(0, 180));
         if (e.raw_model_output) setRawOut(e.raw_model_output);
         return;
       }
 
       const ok = data as ApiSuccess;
       if (ok.ok) {
-        setOffersByPage((prev) => ({ ...(prev ?? {}), [metaPage]: ok.offers }));
+        const stamped = ok.offers.map((row) => ({
+          ...row,
+          store_id: row.store_id && row.store_id !== "lidl" ? row.store_id : retailer,
+        }));
+        setOffersByPage((prev) => ({ ...(prev ?? {}), [metaPage]: stamped }));
         setRowStatusByPage((prev) => ({
           ...prev,
-          [metaPage]: Object.fromEntries(ok.offers.map((_, i) => [i, "pending" as const])) as Record<
+          [metaPage]: Object.fromEntries(stamped.map((_, i) => [i, "pending" as const])) as Record<
             number,
             RowReviewStatus
           >,
         }));
         setModel(ok.model);
         setOcrDump(ok.ocr_raw ?? null);
+        downloadLeafletOffersCsv(
+          stamped.map((row) => ({ ...row, page_no: row.page_no ?? metaPage })),
+          `${(fileName || "letak").replace(/\.pdf$/i, "")}-strana-${metaPage}.csv`
+        );
+        toast.success(
+          `Strana ${metaPage}`,
+          stamped.length ? `${stamped.length} produktů z parseru` : "Parser doběhl, ale nenašel žádný produkt"
+        );
       }
-    } catch {
-      setErr("Síťová chyba nebo neplatná odpověď serveru.");
+    } catch (e) {
+      const timedOut =
+        (e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError")) ||
+        (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError"));
+      const msg = timedOut
+        ? "Parser překročil 100 s."
+        : "Síťová chyba nebo neplatná odpověď serveru.";
+      setErr(msg);
+      toast.error("Parser selhal", msg);
     } finally {
       setBusy(false);
+      setExtractPhase(null);
     }
-  }, [file, kind, pageNo, sourceUrl, pdfPageCount, extractMode]);
+  }, [file, fileName, kind, pageNo, sourceUrl, pdfPageCount, pdfPreviewUrl, extractMode, retailer, toast]);
 
   const importManual = useCallback(async () => {
     const text = manualText.trim();
@@ -1380,6 +1511,15 @@ export default function ReviewPage() {
     file != null &&
     (kind === "image" || (kind === "pdf" && pdfPageCount != null && !pdfPreviewBusy));
 
+  const autoReadPages = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (!canExtract || busy) return;
+    if ((offersByPage?.[pageNo] ?? []).length > 0) return;
+    if (autoReadPages.current.has(pageNo)) return;
+    autoReadPages.current.add(pageNo);
+    void runExtract();
+  }, [canExtract, busy, kind, pageNo, offersByPage, runExtract]);
+
   const goPrev = () => setPageNo((n) => Math.max(1, n - 1));
   const goNext = () =>
     setPageNo((n) =>
@@ -1656,7 +1796,9 @@ export default function ReviewPage() {
               {
                 label: "Extrakce",
                 value:
-                  extractMode === "ocr"
+                  extractMode === "layout"
+                    ? "PDF text"
+                    : extractMode === "ocr"
                     ? "OCR"
                     : extractMode === "vision"
                       ? "Vision"
@@ -1753,6 +1895,14 @@ export default function ReviewPage() {
           >
             Další ⏭
           </button>
+          <button
+            type="button"
+            disabled={!canExtract || busy}
+            onClick={() => void runExtract()}
+            className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+          >
+            {busy ? extractPhase ?? `Čtu stranu ${pageNo}…` : `Číst stranu ${pageNo}`}
+          </button>
         </div>
       ) : null}
 
@@ -1763,7 +1913,7 @@ export default function ReviewPage() {
               Náhled stránky
             </p>
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-              Strana {pageNo} · Lidl CZ
+              Strana {pageNo} · {retailerLabel(retailer)}
             </span>
           </div>
           {kind === "manual" ? (
@@ -1950,6 +2100,69 @@ export default function ReviewPage() {
           </div>
 
           <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-[0_12px_48px_rgba(15,23,42,0.06)] ring-1 ring-slate-100">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={!canExtract || busy}
+                onClick={() => {
+                  autoReadPages.current.delete(pageNo);
+                  void runExtract();
+                }}
+                className="rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+              >
+                {busy ? extractPhase ?? `Parser čte stranu ${pageNo}…` : `Spustit parser strany ${pageNo}`}
+              </button>
+              <button
+                type="button"
+                disabled={!flat.offers.length || busy}
+                onClick={() =>
+                  downloadLeafletOffersCsv(
+                    flat.offers,
+                    `${(fileName || "letak").replace(/\.pdf$/i, "")}-offer-raw.csv`
+                  )
+                }
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Export Excel
+              </button>
+              <button
+                type="button"
+                disabled={!flat.offers.length || busy}
+                onClick={() =>
+                  downloadLeafletOffersJson(
+                    flat.offers,
+                    `${(fileName || "letak").replace(/\.pdf$/i, "")}-offer-raw.json`
+                  )
+                }
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Export JSON
+              </button>
+              <p className="text-sm font-semibold text-slate-700">
+                {busy
+                  ? extractPhase ?? "Čekej, výstup se sem vypíše."
+                  : err
+                    ? "Parser skončil chybou."
+                    : flat.offers.length
+                      ? `Parser: ${flat.offers.length} produktů`
+                      : ocrDump
+                        ? `Parser doběhl, 0 produktů (OCR slov: ${ocrDump.word_count})`
+                        : "Parser ještě neběžel."}
+              </p>
+            </div>
+            {err ? (
+              <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900" role="alert">
+                {err}
+              </div>
+            ) : null}
+            {ocrDump && !flat.offers.length && !busy ? (
+              <pre className="mb-4 max-h-40 overflow-auto rounded-xl bg-slate-900 p-3 text-xs text-slate-100">
+                {ocrDump.words
+                  .slice(0, 80)
+                  .map((w) => ("text" in w && typeof w.text === "string" ? w.text : String(w)))
+                  .join(" ")}
+              </pre>
+            ) : null}
             {flat.offers.length ? (
               <ProductReviewCards
                 offers={flat.offers}
@@ -1973,7 +2186,9 @@ export default function ReviewPage() {
               />
             ) : (
               <p className="text-sm text-slate-500">
-                Po extrakci se zobrazí produktové karty s cenami a výřezy (OCR).
+                {busy
+                  ? `Čtu stranu ${pageNo} parserem a ukládám do Excelu…`
+                  : "Strana se čte sama. Až doběhne, stáhne se CSV a tady budou karty produktů."}
               </p>
             )}
           </div>
@@ -1991,12 +2206,24 @@ export default function ReviewPage() {
                     <input
                       type="radio"
                       name="extract-mode"
+                      checked={extractMode === "layout"}
+                      onChange={() => setExtractMode("layout")}
+                      className="text-indigo-600"
+                    />
+                    <span className="text-slate-800">
+                      <strong className="text-indigo-700">PDF text</strong> — layout extraktor
+                    </span>
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="extract-mode"
                       checked={extractMode === "ocr"}
                       onChange={() => setExtractMode("ocr")}
                       className="text-indigo-600"
                     />
                     <span className="text-slate-800">
-                      <strong className="text-indigo-700">OCR</strong> — bez AI
+                      <strong className="text-indigo-700">OCR</strong> — jen sken bez textu
                     </span>
                   </label>
                   <label className="inline-flex cursor-pointer items-center gap-2">
@@ -2025,8 +2252,10 @@ export default function ReviewPage() {
                   </label>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                  {extractMode === "ocr"
-                    ? "Tesseract + kotvy cen. Bez API klíče."
+                  {extractMode === "layout"
+                    ? "Čte vestavěný text PDF (stejně jako dávky). Náhled A4 je jen pro oči. Tesseract se nespouští."
+                    : extractMode === "ocr"
+                    ? "Tesseract — jen když PDF nemá textovou vrstvu."
                     : extractMode === "vision"
                       ? "OpenAI / Gemini dle .env — bez klíče ukázková data."
                       : "OCR bloky → Ollama normalizace do tvého JSON schématu."}
@@ -2057,8 +2286,10 @@ export default function ReviewPage() {
                     className="rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50"
                   >
                     {busy
-                      ? "Zpracovávám…"
-                      : extractMode === "ocr"
+                      ? extractPhase ?? "Zpracovávám…"
+                      : extractMode === "layout"
+                        ? "Číst PDF text"
+                        : extractMode === "ocr"
                         ? "Spustit OCR"
                         : extractMode === "vision"
                           ? "Spustit vision"
@@ -2106,7 +2337,7 @@ export default function ReviewPage() {
                         {kind === "pdf" && pdfPageCount != null ? ` / ${pdfPageCount}` : ""}
                       </span>
                       <span className="rounded-full bg-white/10 px-2.5 py-1 font-medium text-white/85 ring-1 ring-white/15">
-                        Režim: {extractMode === "ocr" ? "OCR" : extractMode === "vision" ? "Vision" : "Local LLM"}
+                        Režim: {extractMode === "layout" ? "PDF text" : extractMode === "ocr" ? "OCR" : extractMode === "vision" ? "Vision" : "Local LLM"}
                       </span>
                     </div>
                   </div>

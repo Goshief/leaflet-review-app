@@ -1,6 +1,8 @@
 /**
- * Striktní výstup: jedna stránka Lidl CZ letáku → řádky pro staging.
+ * Striktní 21polový staging kontrakt jedné strany letáku (BILLA, Lidl, …).
  */
+
+const STORE_ID_RE = /^[a-z][a-z0-9_-]{1,32}$/;
 
 export const LIDL_PAGE_OFFER_KEYS = [
   "store_id",
@@ -29,7 +31,7 @@ export const LIDL_PAGE_OFFER_KEYS = [
 export type LidlPageOfferKey = (typeof LIDL_PAGE_OFFER_KEYS)[number];
 
 export type LidlPageOffer = {
-  store_id: "lidl";
+  store_id: string;
   source_type: "leaflet";
   page_no: number | null;
   valid_from: string | null;
@@ -102,7 +104,9 @@ function validateOne(
   if (errors.length) return { errors };
 
   const store_id = obj.store_id;
-  if (store_id !== "lidl") errors.push(`${p}: store_id musí být "lidl"`);
+  if (typeof store_id !== "string" || !STORE_ID_RE.test(store_id)) {
+    errors.push(`${p}: store_id musí být malý identifikátor (např. billa, lidl)`);
+  }
 
   const source_type = obj.source_type;
   if (source_type !== "leaflet")
@@ -168,7 +172,7 @@ function validateOne(
   if (errors.length) return { errors };
 
   const row: LidlPageOffer = {
-    store_id: "lidl",
+    store_id: store_id as string,
     source_type: "leaflet",
     page_no: page_no as number | null,
     valid_from: obj.valid_from as string | null,

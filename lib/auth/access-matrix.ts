@@ -26,7 +26,7 @@ export type ApiAccessRule = {
 /**
  * Public exceptions — proven public purpose from implementation:
  * - `/` Setrik shopper homepage (public offers UI)
- * - `/api/setrik/offers` public offers feed for Setrik
+ * - `/api/setrik/*` public comparison/search/smart-cart APIs
  * - `/api/auth/login` public login endpoint (same-origin + rate limited)
  * - `/login`, `/logout`, `/forbidden` auth UX (must not redirect-loop)
  */
@@ -55,6 +55,8 @@ export const PAGE_ACCESS_MATRIX: PageAccessRule[] = [
     guardModule: "app/image-generation-requests/layout.tsx",
   },
   { path: "/settings", access: "admin", guardModule: "app/settings/layout.tsx" },
+  { path: "/catalog", access: "operator", guardModule: "app/catalog/layout.tsx" },
+  { path: "/letak", access: "operator", guardModule: "app/letak/layout.tsx" },
 ];
 
 export const API_ACCESS_MATRIX: ApiAccessRule[] = [
@@ -74,6 +76,7 @@ export const API_ACCESS_MATRIX: ApiAccessRule[] = [
   { file: "app/api/intake-file/route.ts", methods: { GET: "operator" } },
   { file: "app/api/extract/route.ts", methods: { POST: "operator" } },
   { file: "app/api/ocr-lidl-page/route.ts", methods: { POST: "operator" } },
+  { file: "app/api/parse-leaflet-page/route.ts", methods: { POST: "operator" } },
   { file: "app/api/parse-lidl-page/route.ts", methods: { POST: "operator" } },
   { file: "app/api/normalize/route.ts", methods: { POST: "operator" } },
   { file: "app/api/import-offers/route.ts", methods: { POST: "operator" } },
@@ -87,6 +90,15 @@ export const API_ACCESS_MATRIX: ApiAccessRule[] = [
   },
   { file: "app/api/parser-test/route.ts", methods: { POST: "admin" } },
   { file: "app/api/setrik/offers/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/retailers/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/products/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/products/[id]/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/smart-cart/route.ts", methods: { POST: "public" } },
+  { file: "app/api/setrik/smart-products/route.ts", methods: { GET: "public" } },
+  { file: "app/api/setrik/smart-products/[id]/route.ts", methods: { GET: "public" } },
+  { file: "app/api/catalog/export/route.ts", methods: { GET: "operator" } },
+  { file: "app/api/catalog/files/route.ts", methods: { GET: "operator" } },
+  { file: "app/api/catalog/files/[name]/route.ts", methods: { GET: "operator" } },
   { file: "app/logout/route.ts", methods: { POST: "public", GET: "public" } },
 ];
 

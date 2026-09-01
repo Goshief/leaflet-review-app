@@ -1,4 +1,4 @@
-import { extractWordsFromImageBuffer, runOcrPipeline } from "@/lib/ocr";
+import { extractWordsFromLeafletImageBuffer, runOcrPipeline } from "@/lib/ocr";
 import { NextRequest, NextResponse } from "next/server";
 import { requireOperatorApi } from "@/lib/auth/guards";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -99,10 +99,15 @@ export async function POST(req: NextRequest) {
 
   const su = form.get("source_url");
   const source_url = typeof su === "string" && su.trim() ? su.trim() : null;
+  const storeRaw = form.get("store_id");
+  const store_id =
+    typeof storeRaw === "string" && storeRaw.trim()
+      ? storeRaw.trim().toLowerCase()
+      : "lidl";
 
   try {
-    const words = await extractWordsFromImageBuffer(buf);
-    const pipeline = runOcrPipeline(words, page_no);
+    const words = await extractWordsFromLeafletImageBuffer(buf, { columns: 2, rows: 3, scale: 1.35 });
+    const pipeline = runOcrPipeline(words, page_no, { store_id });
     return NextResponse.json({
       ok: true,
       mode: "extract",

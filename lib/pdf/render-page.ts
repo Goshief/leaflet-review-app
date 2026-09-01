@@ -1,3 +1,6 @@
+import { textItemsToOcrWords } from "./text-words";
+import type { OcrWord } from "../ocr/types";
+
 /**
  * Klient-side vykreslení jedné stránky PDF do PNG (pro OpenAI vision).
  * Spouštěj jen v prohlížeči (canvas).
@@ -24,7 +27,8 @@ export async function getPdfPageCount(file: File): Promise<number> {
  */
 export async function renderPdfPageToPngBlob(
   file: File,
-  pageNumber1Based: number
+  pageNumber1Based: number,
+  options?: { scale?: number; type?: "image/png" | "image/jpeg"; quality?: number }
 ): Promise<Blob> {
   const pdfjs = await getPdfjs();
   const data = await file.arrayBuffer();
@@ -34,8 +38,67 @@ export async function renderPdfPageToPngBlob(
     throw new Error(`Stránka ${pageNumber1Based} není v rozsahu 1–${n}.`);
   }
   const page = await pdf.getPage(pageNumber1Based);
-  // Vyšší scale = lepší OCR na cenách (za cenu většího PNG).
-  const scale = 3;
+  const scale = options?.scale ?? 1.45;
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Nelze vytvořit 2D kontext canvasu.");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const type = options?.type ?? "image/jpeg";
+  const quality = options?.quality ?? 0.82;
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("canvas.toBlob selhal"))),
+      type,
+      type === "image/jpeg" ? quality : undefined
+    );
+  });
+}
+
+export async function renderPdfPageToPngFile(
+  file: File,
+  pageNumber1Based: number,
+  options?: { scale?: number; type?: "image/png" | "image/jpeg"; quality?: number }
+): Promise<File> {
+  const type = options?.type ?? "image/jpeg";
+  const blob = await renderPdfPageToPngBlob(file, pageNumber1Based, { ...options, type });
+  const ext = type === "image/png" ? "png" : "jpg";
+  const base = file.name.replace(/\.pdf$/i, "") || "letak";
+  return new File([blob], `${base}-p${pageNumber1Based}.${ext}`, { type });
+}
+
+export async function loadPdfDocument(file: File) {
+  const pdfjs = await getPdfjs();
+  const data = await file.arrayBuffer();
+  return pdfjs.getDocument({ data }).promise;
+}
+
+export async function extractPdfPageWords(
+  file: File,
+  pageNumber1Based: number
+): Promise<{ words: OcrWord[]; text: string; numPages: number }> {
+  const pdf = await loadPdfDocument(file);
+  const n = pdf.numPages;
+  if (pageNumber1Based < 1 || pageNumber1Based > n) {
+    throw new Error(`Stránka ${pageNumber1Based} není v rozsahu 1–${n}.`);
+  }
+  const page = await pdf.getPage(pageNumber1Based);
+  const content = await page.getTextContent();
+  const { words, text } = textItemsToOcrWords(content.items);
+  return { words, text, numPages: n };
+}
+
+export async function renderLoadedPdfPage(
+  pdf: Awaited<ReturnType<typeof loadPdfDocument>>,
+  pageNumber1Based: number,
+  scale: number
+): Promise<Blob> {
+  if (pageNumber1Based < 1 || pageNumber1Based > pdf.numPages) {
+    throw new Error(`Stránka ${pageNumber1Based} není v rozsahu 1–${pdf.numPages}.`);
+  }
+  const page = await pdf.getPage(pageNumber1Based);
   const viewport = page.getViewport({ scale });
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
@@ -44,21 +107,6 @@ export async function renderPdfPageToPngBlob(
   canvas.height = viewport.height;
   await page.render({ canvasContext: ctx, viewport }).promise;
   return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error("canvas.toBlob selhal"))),
-      "image/png"
-    );
-  });
-}
-
-export async function renderPdfPageToPngFile(
-  file: File,
-  pageNumber1Based: number
-): Promise<File> {
-  const blob = await renderPdfPageToPngBlob(file, pageNumber1Based);
-  const base =
-    file.name.replace(/\.pdf$/i, "") || "letak";
-  return new File([blob], `${base}-p${pageNumber1Based}.png`, {
-    type: "image/png",
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("canvas.toBlob selhal"))), "image/jpeg", 0.82);
   });
 }

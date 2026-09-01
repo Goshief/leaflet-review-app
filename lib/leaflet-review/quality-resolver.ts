@@ -1,7 +1,7 @@
-import type { ExtractedCandidate } from "./extractor";
+import type { ExtractedCandidate } from "./extractor.ts";
 
 const DESCRIPTOR_ONLY=/^(?:podestýlková|polotučný|speciál|ochucená|ochucený|ochucené|rané|vinné\s+bílé)$/i;
-const GENERIC_ONLY=/^(?:balení|více\s+druhů|druhy|mix|kombo|plech)$/i;
+const GENERIC_ONLY=/^(?:balení|více\s+druhů|druhy|mix|kombo|plech|běžná|víkendových|cenazatkg|hamburgerové)$/i;
 
 export function applyCandidateQuality(candidate:ExtractedCandidate):ExtractedCandidate{
   const name=String(candidate.product_name??"").replace(/\s+/g," ").trim();

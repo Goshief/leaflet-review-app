@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
+    "catalog:excel": "node --experimental-strip-types scripts/export-catalog-excel.mts",
     "build": "next build",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
@@ -20,6 +21,17 @@
     "test:security-headers": "node --experimental-strip-types scripts/test-security-headers.mts",
     "test:intake-upload-result": "node --experimental-strip-types scripts/test-intake-upload-result.mts",
     "test:parser": "node --experimental-strip-types scripts/verify-parser.mts",
+    "test:offer-raw-extractor": "node --experimental-strip-types scripts/test-offer-raw-extractor.mts",
+    "test:pdf-text-parser": "node --experimental-strip-types scripts/test-pdf-text-parser.mts",
+    "test:billa-staging-gold": "node --experimental-strip-types scripts/test-billa-staging-gold.mts",
+    "test:leaflet-watcher": "node --experimental-strip-types scripts/test-leaflet-watcher.mts",
+    "test:leaflet-pdf-intake": "node --experimental-strip-types scripts/test-leaflet-pdf-intake.mts",
+    "test:leaflet-pdf-pages": "node --experimental-strip-types scripts/test-leaflet-pdf-pages.mts",
+    "test:leaflet-page-parser": "node --experimental-strip-types scripts/test-leaflet-page-parser.mts",
+    "test:leaflet-three-pass": "node --experimental-strip-types scripts/test-leaflet-three-pass.mts",
+    "test:leaflet-reread": "node --experimental-strip-types scripts/test-leaflet-reread.mts",
+    "test:leaflet-review-workflow": "node --experimental-strip-types scripts/test-leaflet-review-workflow.mts",
+    "test:reread-merge": "node --experimental-strip-types scripts/test-reread-merge.mts",
     "test:map-offers": "node --experimental-strip-types scripts/test-map-offers.mts",
     "test:quarantine": "node --experimental-strip-types scripts/test-quarantine.mts",
     "test:commit-error-shape": "node --experimental-strip-types scripts/test-commit-error-shape.mts",
@@ -46,9 +58,10 @@
     "test:e2e": "playwright test",
     "test:e2e:quarantine-db-route": "playwright test e2e/quarantine-db-route.spec.ts",
     "test:stabilization": "npm run test:commit-error-shape && npm run test:stats-error-shape && npm run test:commit-flow && npm run test:dashboard-metrics && npm run test:dashboard-yesterday-coverage && npm run test:dashboard-trend-nonzero && npm run test:dashboard-timestamp-fallbacks && npm run test:dashboard-raw-null-created-at && npm run test:timezone-boundary && npm run test:routing-overview-quarantine && npm run test:review-filter-state",
-    "verify": "npm run test:commit-error-shape && npm run test:stats-error-shape && npm run test:commit-flow && npm run test:dashboard-metrics && npm run test:dashboard-yesterday-coverage && npm run test:dashboard-configured-env && npm run test:dashboard-trend-nonzero && npm run test:dashboard-timestamp-fallbacks && npm run test:dashboard-raw-null-created-at && npm run test:timezone-boundary && npm run test:routing-overview-quarantine && npm run test:review-filter-state && npm run test:parser && npm run test:map-offers && npm run test:quarantine && npm run test:batch-item-update-validation && npm run test:batch-item-update-flow && npm run test:image-keys-helper && npm run test:batch-item-image-state && npm run test:image-review-actions && npm run test:missing-asset-workflow && npm run test:generation-request-flow && npm run test:generation-request-lifecycle && npm run test:safe-error-contract && npm run test:auth-session && npm run test:auth-roles && npm run test:auth-guards && npm run test:auth-route-coverage && npm run test:logout-csrf && npm run test:login-rate-limit && npm run test:security-headers && npm run test:intake-upload-result && npm run test:package-test-paths"
+    "verify": "npm run test:commit-error-shape && npm run test:stats-error-shape && npm run test:commit-flow && npm run test:dashboard-metrics && npm run test:dashboard-yesterday-coverage && npm run test:dashboard-configured-env && npm run test:dashboard-trend-nonzero && npm run test:dashboard-timestamp-fallbacks && npm run test:dashboard-raw-null-created-at && npm run test:timezone-boundary && npm run test:routing-overview-quarantine && npm run test:review-filter-state && npm run test:parser && npm run test:offer-raw-extractor && npm run test:pdf-text-parser && npm run test:billa-staging-gold && npm run test:map-offers && npm run test:quarantine && npm run test:batch-item-update-validation && npm run test:batch-item-update-flow && npm run test:image-keys-helper && npm run test:batch-item-image-state && npm run test:image-review-actions && npm run test:missing-asset-workflow && npm run test:generation-request-flow && npm run test:generation-request-lifecycle && npm run test:safe-error-contract && npm run test:auth-session && npm run test:auth-roles && npm run test:auth-guards && npm run test:auth-route-coverage && npm run test:logout-csrf && npm run test:login-rate-limit && npm run test:security-headers && npm run test:intake-upload-result && npm run test:package-test-paths"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.8",
     "@supabase/ssr": "0.9.0",
     "@supabase/supabase-js": "^2.49.1",
     "@vercel/analytics": "^2.0.1",
@@ -58,7 +71,8 @@
     "pg": "^8.16.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "tesseract.js": "^5.1.1"
+    "tesseract.js": "^5.1.1",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.20.1",
