@@ -27,6 +27,10 @@ export function getPgPool(): Pool {
   cachedPool = new Pool({
     connectionString: url,
     ssl: { rejectUnauthorized: shouldRejectUnauthorized() },
+    max: 1,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 5_000,
+    allowExitOnIdle: true,
   });
   return cachedPool;
 }
@@ -40,4 +44,3 @@ export async function withPgClient<T>(fn: (c: PoolClient) => Promise<T>): Promis
     client.release();
   }
 }
-
