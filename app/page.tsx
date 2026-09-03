@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { getSetrikPublicOffers } from "@/lib/setrik/public-offers";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 function formatPrice(value: number | null, currency: string) {
   if (value == null) return "Cena neuvedena";
@@ -56,13 +56,13 @@ export default async function SetrikHomePage() {
             <span>
               <span className="block text-xl font-black tracking-tight text-slate-950">šetřík</span>
               <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
-                slevy z letáků
+                ceny z webů obchodů
               </span>
             </span>
           </Link>
           <div className="hidden items-center gap-3 text-sm font-semibold text-slate-600 md:flex">
             <a href="#nejvetsi-slevy" className="hover:text-blue-700">Největší slevy</a>
-            <Link href="/review" className="hover:text-blue-700">Nahrát leták</Link>
+            <Link href="/catalog" className="hover:text-blue-700">Webové katalogy</Link>
           </div>
         </header>
 
@@ -73,10 +73,10 @@ export default async function SetrikHomePage() {
                 Setřík hlídá akce za tebe
               </p>
               <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight text-slate-950 sm:text-6xl">
-                Nejlepší slevy z českých letáků na jednom místě
+                Produkty a ceny z českých obchodů na jednom místě
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-                Přehledná homepage pro veřejný Setřík. Níže najdeš sekci s 15 produkty s největší slevou dnes.
+                Šetřík pravidelně prochází dostupné produktové stránky obchodů, ukládá ceny a ukazuje nejlepší nabídky.
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <a
@@ -86,10 +86,10 @@ export default async function SetrikHomePage() {
                   Zobrazit největší slevy
                 </a>
                 <Link
-                  href="/review"
+                  href="/catalog"
                   className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50"
                 >
-                  Nahrát / zkontrolovat PDF
+                  Stav webových katalogů
                 </Link>
               </div>
             </div>
@@ -102,7 +102,7 @@ export default async function SetrikHomePage() {
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-2xl bg-white/12 p-4 ring-1 ring-white/20">
-                  <p className="text-blue-100">Nabídek celkem</p>
+                  <p className="text-blue-100">Načteno nabídek</p>
                   <p className="mt-1 text-2xl font-black">{data.total}</p>
                 </div>
                 <div className="rounded-2xl bg-white/12 p-4 ring-1 ring-white/20">
@@ -114,17 +114,17 @@ export default async function SetrikHomePage() {
           </div>
         </section>
 
-        {!data.configured ? (
-          <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+        {!data.ok ? (
+          <div className="mt-6 rounded-3xl border border-red-200 bg-red-50 p-5 font-semibold text-red-950">
             {data.message}
           </div>
         ) : null}
 
-        {offers.length === 0 ? (
+        {data.ok && offers.length === 0 ? (
           <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
-            Zatím nejsou dostupné žádné nabídky. Nahraj leták přes <Link href="/review" className="font-semibold text-blue-700 underline">/review</Link>.
+            Webové crawlery zatím neuložily žádné dostupné produkty.
           </div>
-        ) : (
+        ) : data.ok ? (
           <section id="nejvetsi-slevy" className="mt-8">
             <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
               <div>
@@ -180,9 +180,13 @@ export default async function SetrikHomePage() {
                         </h3>
                       </div>
                       <div>
-                        <p className="text-2xl font-black text-slate-950">
-                          {formatPrice(offer.price, offer.currency)}
-                        </p>
+                        {offer.product_url ? (
+                          <a href={offer.product_url} rel="nofollow noopener" target="_blank" className="text-2xl font-black text-slate-950 hover:text-blue-700">
+                            {formatPrice(offer.price, offer.currency)}
+                          </a>
+                        ) : (
+                          <p className="text-2xl font-black text-slate-950">{formatPrice(offer.price, offer.currency)}</p>
+                        )}
                         {offer.regular_price != null ? (
                           <p className="text-sm text-slate-400 line-through">
                             {formatPrice(offer.regular_price, offer.currency)}
@@ -210,7 +214,7 @@ export default async function SetrikHomePage() {
               })}
             </div>
           </section>
-        )}
+        ) : null}
       </section>
     </main>
   );

@@ -1,10 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { CATALOG_RETAILER_IDS, getCatalogAdapter } from "@/lib/catalog-collector/adapters";
-import { catalogProductsToCsvFiles, catalogProductsToXlsx } from "@/lib/catalog-collector/excel";
+import { catalogProductsToXlsx } from "@/lib/catalog-collector/excel";
 import { collectCatalogOffline } from "@/lib/catalog-collector/offline-run";
-import { writeCatalogSnapshot } from "@/lib/catalog-collector/snapshot";
 import { requireOperatorApi } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
@@ -41,16 +38,8 @@ export async function GET(req: Request) {
       stats: result.stats,
       collectedAt,
     });
-    const csvFiles = catalogProductsToCsvFiles(result.products, collectedAt);
     const stamp = collectedAt.slice(0, 19).replace(/[:T]/g, "-");
     const base = `catalog-${adapter.retailer}-${stamp}`;
-    const dir = path.join(process.cwd(), "exports");
-    await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, `${base}.xlsx`), xlsx);
-    for (const [filename, csv] of Object.entries(csvFiles)) {
-      await writeFile(path.join(dir, `${base}-${filename}`), csv, "utf8");
-    }
-    await writeCatalogSnapshot(`catalog-${adapter.retailer}-latest.xlsx`, xlsx);
 
     return new NextResponse(new Uint8Array(xlsx), {
       status: 200,

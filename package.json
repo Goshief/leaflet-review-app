@@ -33,6 +33,7 @@
     "test:leaflet-review-workflow": "node --experimental-strip-types scripts/test-leaflet-review-workflow.mts",
     "test:reread-merge": "node --experimental-strip-types scripts/test-reread-merge.mts",
     "test:map-offers": "node --experimental-strip-types scripts/test-map-offers.mts",
+    "test:web-catalog-public-offers": "node --experimental-strip-types scripts/test-web-catalog-public-offers.mts",
     "test:quarantine": "node --experimental-strip-types scripts/test-quarantine.mts",
     "test:commit-error-shape": "node --experimental-strip-types scripts/test-commit-error-shape.mts",
     "test:stats-error-shape": "node --experimental-strip-types scripts/test-stats-error-shape.mts",
