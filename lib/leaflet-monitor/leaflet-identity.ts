@@ -97,6 +97,15 @@ function isoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+function todayPragueYmd(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export function normalizeContentHash(value: string | null | undefined): string | null {
   if (!value) return null;
   const hex = value.replace(/^pdf:/i, "").toLowerCase().replace(/[^a-f0-9]/g, "");
@@ -150,26 +159,45 @@ export function identityFromDocument(retailer: string, row: {
   };
 }
 
+function hasSpecificExternalId(value: string | null): boolean {
+  if (!value) return false;
+  return value.length >= 6 && /\d/.test(value) && !/^(nabidky|letak|letaky|akce|aktualni)$/i.test(value);
+}
+
 export function isDuplicateLeaflet(existing: LeafletIdentity, incoming: LeafletIdentity): boolean {
   if (existing.retailer !== incoming.retailer) return false;
   if (contentHashesMatch(existing.content_hash, incoming.content_hash)) return true;
-  if (incoming.canonical_source_url && existing.canonical_source_url && incoming.canonical_source_url === existing.canonical_source_url) {
-    return true;
-  }
-  if (incoming.pdf_url && existing.pdf_url && canonicalizePdfUrl(incoming.pdf_url) === canonicalizePdfUrl(existing.pdf_url)) {
-    return true;
-  }
-  if (incoming.external_id && existing.external_id && incoming.external_id === existing.external_id) {
-    return true;
-  }
-  const sameValidity =
+
+  const sameValidity = Boolean(
     incoming.valid_from &&
     incoming.valid_to &&
     existing.valid_from === incoming.valid_from &&
-    existing.valid_to === incoming.valid_to;
-  if (sameValidity && incoming.external_id && existing.external_id && incoming.external_id === existing.external_id) {
-    return true;
-  }
+    existing.valid_to === incoming.valid_to,
+  );
+  const sameSource = Boolean(
+    incoming.canonical_source_url &&
+    existing.canonical_source_url &&
+    incoming.canonical_source_url === existing.canonical_source_url,
+  );
+  const samePdf = Boolean(
+    incoming.pdf_url &&
+    existing.pdf_url &&
+    canonicalizePdfUrl(incoming.pdf_url) === canonicalizePdfUrl(existing.pdf_url),
+  );
+  const sameExternal = Boolean(
+    incoming.external_id &&
+    existing.external_id &&
+    incoming.external_id === existing.external_id,
+  );
+
+  // A retailer can reuse the same viewer/PDF URL for a new week. Therefore URL alone
+  // is never enough to suppress a new import when the validity window changed.
+  if (sameValidity && (sameSource || samePdf || sameExternal)) return true;
+
+  // For retailer-specific IDs that are actually versioned (Publitas/flyer/week IDs),
+  // allow dedupe even when the validity text was not available on the source page.
+  if (sameExternal && hasSpecificExternalId(incoming.external_id)) return true;
+
   return false;
 }
 
@@ -180,8 +208,12 @@ export function findDuplicateLeaflet(known: LeafletIdentity[], incoming: Leaflet
 export function selectWatchableAssets(retailer: string, assets: LeafletAsset[], limit = 12): LeafletAsset[] {
   const seen = new Set<string>();
   const out: LeafletAsset[] = [];
+  const today = todayPragueYmd();
   for (const asset of assets) {
     if (asset.score <= 0) continue;
+    const identity = identityFromAsset(retailer, asset);
+    // Expired dated flyers are never downloaded again. Current and future flyers stay eligible.
+    if (identity.valid_to && identity.valid_to < today) continue;
     const key = canonicalLeafletUrl(retailer, asset.url);
     if (seen.has(key)) continue;
     seen.add(key);
