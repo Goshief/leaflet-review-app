@@ -1,21 +1,38 @@
 import type { RetailerId } from "./learning";
 
-/** Shared automatic leaflet watch. Albert stays out of this cadence. */
-export const WATCHED_RETAILERS = ["billa", "lidl", "kaufland", "penny"] as const;
+export const WATCHED_RETAILERS = [
+  "albert",
+  "billa",
+  "dm",
+  "globus",
+  "kaufland",
+  "kosik",
+  "lidl",
+  "penny",
+  "rohlik",
+  "rossmann",
+  "tesco",
+  "teta",
+] as const;
 export type WatchedRetailerId = (typeof WATCHED_RETAILERS)[number];
 
 export const DEFAULT_WATCHER_INTERVAL_HOURS = 2;
 export const WATCHER_ASSET_LIMIT = 12;
 
-/**
- * Vercel Cron expressions (UTC). Keep in sync with vercel.json leaflet fetch crons.
- * Hobby allows one tick per day; in-app LEAFLET_WATCHER_INTERVAL_HOURS can skip extra ticks.
- */
+/** Daily UTC schedules. Vercel Hobby allows daily cron cadence. */
 export const WATCHER_CRON_SCHEDULES: Record<WatchedRetailerId, string> = {
   kaufland: "13 7 * * *",
   lidl: "17 7 * * *",
   penny: "23 7 * * *",
   billa: "29 7 * * *",
+  albert: "35 7 * * *",
+  globus: "41 7 * * *",
+  rossmann: "47 7 * * *",
+  tesco: "53 7 * * *",
+  teta: "59 7 * * *",
+  dm: "5 8 * * *",
+  kosik: "11 8 * * *",
+  rohlik: "17 8 * * *",
 };
 
 export function isWatchedRetailer(id: string): id is WatchedRetailerId {
