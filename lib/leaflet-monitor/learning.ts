@@ -1,4 +1,16 @@
-export type RetailerId = "lidl" | "kaufland" | "penny" | "billa" | "albert";
+export type RetailerId =
+  | "albert"
+  | "billa"
+  | "dm"
+  | "globus"
+  | "kaufland"
+  | "kosik"
+  | "lidl"
+  | "penny"
+  | "rohlik"
+  | "rossmann"
+  | "tesco"
+  | "teta";
 
 export type CheckStatus = "downloaded" | "asset_found" | "unchanged" | "error" | "skipped";
 
