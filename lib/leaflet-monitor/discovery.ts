@@ -23,6 +23,9 @@ function decodeHtml(value: string) {
 function safeDecodeUri(value: string) {
   try { return decodeURIComponent(value); } catch { return value; }
 }
+function plainText(value: string) {
+  return decodeHtml(value).replace(/<script\b[\s\S]*?<\/script>/gi, " ").replace(/<style\b[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
 
 function links(html: string, base: string) {
   const out: Array<{ url: string; label: string }> = [];
@@ -32,15 +35,20 @@ function links(html: string, base: string) {
     try {
       const url = new URL(raw, base).toString();
       if (/\.(?:jpe?g|png|gif|webp|svg|ico)(?:$|[?#])/i.test(url)) return;
-      const key = `${url}\n${label}`;
+      const cleanLabel = plainText(label);
+      const key = `${url}\n${cleanLabel}`;
       if (seen.has(key)) return;
       seen.add(key);
-      out.push({ url, label: decodeHtml(label).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() });
+      out.push({ url, label: cleanLabel });
     } catch {}
   };
 
   for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    add(match[1] || "", match[2] || "");
+    const index = match.index ?? 0;
+    // Retailer cards often keep title/validity next to the link rather than inside it.
+    // Carry a small surrounding text window so identityFromAsset can parse the dates.
+    const context = plainText(html.slice(Math.max(0, index - 700), Math.min(html.length, index + match[0].length + 300)));
+    add(match[1] || "", `${match[2] || ""} ${context}`);
   }
 
   // Some leaflet sites place the viewer in an iframe or in a JS/data attribute rather
@@ -49,7 +57,9 @@ function links(html: string, base: string) {
     const raw = match[1] || "";
     const decoded = decodeHtml(raw);
     if (!LEAFLET.test(decoded) && !VIEWER_HOST.test(decoded) && !/\.pdf(?:$|[?#])/i.test(decoded)) continue;
-    add(raw, "viewer");
+    const index = match.index ?? 0;
+    const context = plainText(html.slice(Math.max(0, index - 500), Math.min(html.length, index + match[0].length + 250)));
+    add(raw, `viewer ${context}`);
   }
 
   return out;
@@ -115,14 +125,11 @@ function retailerScore(retailer: RetailerId, url: string, label: string) {
   } else if (retailer === "globus") {
     if (/globus\.cz\/globus\/letaky\/akcni-letak-/i.test(url)) score += 180;
     if (/globus\.cz\/globus\/letaky\/aktualni/i.test(url)) score += 120;
-    // Branch landing pages contain privacy PDFs and are not leaflet documents themselves.
     if (/globus\.cz\/(?!globus\/)[^/]+\/letaky\/?(?:[?#].*)?$/i.test(url)) return -1000;
   } else if (retailer === "rossmann") {
-    // Rossmann exposes a real leaflet PDF next to a Publitas viewer. Prefer that PDF;
-    // generic viewer HTML also contains unrelated legal PDFs.
     if (/rossmann\.cz\/obsah\/[^/]*-pdf-[^/]*\/akcni-letak/i.test(url)) score += 240;
     if (/rossmann\.cz\/obsah\/publitas\/.*akcni-letak/i.test(url)) score += 120;
-    if (/rossmann\.cz\/prihlaseni/i.test(url)) return -1000;
+    if (/rossmann\.cz\/prihlaseni|adform\.net/i.test(url)) return -1000;
   } else if (retailer === "teta") {
     if (/letak\.tetadrogerie\.cz\//i.test(url)) score += 220;
     if (/tetadrogerie\.cz\/akce\/letak/i.test(url)) score += 80;
