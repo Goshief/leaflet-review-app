@@ -9,6 +9,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { RetailerId } from "@/lib/leaflet-monitor/learning";
 import { createSupabasePdfIntakeBackend, ingestOriginalPdf } from "@/lib/leaflet-monitor/pdf-intake";
 import { ensurePagesAfterDownloadAndParse } from "@/lib/leaflet-monitor/page-parser";
+import { identityFromAsset } from "@/lib/leaflet-monitor/leaflet-identity";
 
 type ConnectorConfig = {
   retailer: RetailerId;
@@ -22,6 +23,7 @@ const BUCKET = "leaflet-intake";
 const TUS_CHUNK = 6 * 1024 * 1024;
 const CAPTURE_STATUSES = new Set(["downloaded", "unchanged", "asset_found"]);
 const VIEWER_RETAILERS = new Set<RetailerId>(["lidl", "kaufland", "penny"]);
+const SCHWARZ_RETAILERS = new Set<RetailerId>(["lidl", "kaufland"]);
 
 function todayPrague() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -38,6 +40,26 @@ function normalized(value: string) {
 
 function b64(value: string) {
   return Buffer.from(value, "utf8").toString("base64");
+}
+
+function isTrustedViewerUrl(retailer: RetailerId, url: string) {
+  if (retailer === "lidl") return /lidl\.cz\/l\/cs\/letak\/[^/]+\/view\/flyer/i.test(url);
+  if (retailer === "kaufland") return /leaflets\.kaufland\.com\/cz-CZ\/[^/]+\/ar\/[^/?#]+/i.test(url);
+  if (retailer === "penny") return /files\.rewe\.co\.at\/PennyIntLeaflet\/CZ\/[^/?#]+/i.test(url);
+  return false;
+}
+
+function viewerUrlsFromPayload(payload: Record<string, unknown>, retailer: RetailerId) {
+  const urls: string[] = [];
+  if (Array.isArray(payload.new_viewer_assets)) {
+    for (const value of payload.new_viewer_assets) {
+      if (typeof value === "string" && isTrustedViewerUrl(retailer, value)) urls.push(value);
+    }
+  }
+  if (typeof payload.asset_url === "string" && isTrustedViewerUrl(retailer, payload.asset_url)) {
+    urls.push(payload.asset_url);
+  }
+  return [...new Set(urls)];
 }
 
 async function uploadResumable(path: string, bytes: Uint8Array) {
@@ -95,7 +117,7 @@ async function uploadResumable(path: string, bytes: Uint8Array) {
   }
 }
 
-async function storePdf(supabase: any, path: string, bytes: Uint8Array) {
+async function storePdf(supabase: any, retailer: RetailerId, path: string, bytes: Uint8Array) {
   const { error } = await supabase.storage.from(BUCKET).upload(path, bytes, {
     contentType: "application/pdf",
     cacheControl: "3600",
@@ -103,7 +125,7 @@ async function storePdf(supabase: any, path: string, bytes: Uint8Array) {
   });
   if (!error || /already exists|duplicate|resource exists/i.test(error.message || "")) return { stored: true as const };
   if (!/maximum allowed size|exceeded|too large|payload too large/i.test(error.message || "")) {
-    throw new Error(`Lidl PDF upload: ${error.message}`);
+    throw new Error(`${retailer} PDF upload: ${error.message}`);
   }
   try {
     await uploadResumable(path, bytes);
@@ -117,55 +139,65 @@ async function storePdf(supabase: any, path: string, bytes: Uint8Array) {
   }
 }
 
-async function recoverLidlPdf(supabase: any, assetUrl: string) {
-  const manifest = await resolveViewerPageManifest("lidl", assetUrl);
+async function recoverSchwarzPdf(supabase: any, retailer: RetailerId, assetUrl: string) {
+  if (!SCHWARZ_RETAILERS.has(retailer)) return null;
+  const manifest = await resolveViewerPageManifest(retailer, assetUrl);
   const wanted = normalized(manifest.identifier);
-  const pdfUrl = manifest.pdf_urls.find((url) => normalized(decodeURIComponent(url)).includes(wanted)) ?? null;
+  const candidates = manifest.pdf_urls.filter((url) => {
+    const decoded = normalized(decodeURIComponent(url));
+    return decoded.includes(wanted) || wanted.includes(decoded.split("-").slice(-4).join("-"));
+  });
+  const pdfUrl = candidates[0] ?? manifest.pdf_urls[0] ?? null;
   if (!pdfUrl) return null;
 
   const response = await fetch(pdfUrl, { cache: "no-store", redirect: "follow" });
-  if (!response.ok) throw new Error(`Lidl PDF fallback HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`${retailer} PDF fallback HTTP ${response.status}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-") throw new Error("Lidl PDF fallback nevrátil PDF.");
+  if (new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-") throw new Error(`${retailer} PDF fallback nevrátil PDF.`);
 
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const shortSha = sha256.slice(0, 16);
+  const identity = identityFromAsset(retailer, { url: assetUrl, label: assetUrl, kind: "viewer" }, { pdf_url: pdfUrl, content_hash: sha256 });
   const archive = await ingestOriginalPdf(createSupabasePdfIntakeBackend(supabase), {
-    store_id: "lidl",
+    store_id: retailer,
     source_url: assetUrl,
     pdf_source_url: pdfUrl,
     bytes,
     content_type: "application/pdf",
+    valid_from: identity.valid_from,
+    valid_to: identity.valid_to,
   });
+
   let page_split: unknown = null;
   try {
     page_split = await ensurePagesAfterDownloadAndParse(supabase, archive, bytes);
   } catch (error) {
     page_split = { pages: [], batch_status: "pages_failed", error: error instanceof Error ? error.message : String(error) };
   }
+
   const { data: existing, error: existingError } = await supabase
     .from("leaflet_documents")
-    .select("id,storage_path,filename,processing_status,approved_count,created_at")
-    .eq("retailer_id", "lidl")
+    .select("id,storage_path,filename,processing_status,approved_count,created_at,valid_from,valid_to")
+    .eq("retailer_id", retailer)
     .ilike("filename", `%${shortSha}%`)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (existingError) throw new Error(`Lidl PDF lookup: ${existingError.message}`);
+  if (existingError) throw new Error(`${retailer} PDF lookup: ${existingError.message}`);
 
   let storagePath = existing?.storage_path ? String(existing.storage_path) : "";
   let storageMode: "supabase" | "remote_pdf" = storagePath.includes("/remote-") ? "remote_pdf" : "supabase";
   let storageWarning: string | null = null;
 
   if (!storagePath) {
-    const filename = `lidl-${todayPrague()}__${shortSha}.pdf`;
-    const wantedPath = `lidl/${filename}`;
-    const stored = await storePdf(supabase, wantedPath, bytes);
+    const filename = `${retailer}-${todayPrague()}__${shortSha}.pdf`;
+    const wantedPath = `${retailer}/${filename}`;
+    const stored = await storePdf(supabase, retailer, wantedPath, bytes);
     if (stored.stored) {
       storagePath = wantedPath;
       storageMode = "supabase";
     } else {
-      storagePath = `lidl/remote-${shortSha}.pdf`;
+      storagePath = `${retailer}/remote-${shortSha}.pdf`;
       storageMode = "remote_pdf";
       storageWarning = stored.reason;
     }
@@ -180,13 +212,28 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
           supabase,
           bucket: BUCKET,
           path: storagePath,
-          retailer: "lidl",
+          retailer,
           sourceUrl: pdfUrl,
           bytes,
           force: false,
         });
 
+  // The viewer URL carries the authoritative validity range for Lidl/Kaufland.
+  if (identity.valid_from && identity.valid_to && storagePath) {
+    await supabase
+      .from("leaflet_documents")
+      .update({ valid_from: identity.valid_from, valid_to: identity.valid_to, source_leaflet_number: manifest.identifier })
+      .eq("retailer_id", retailer)
+      .eq("storage_bucket", BUCKET)
+      .eq("storage_path", storagePath);
+  }
+
   return {
+    retailer,
+    viewer_url: assetUrl,
+    identifier: manifest.identifier,
+    valid_from: identity.valid_from,
+    valid_to: identity.valid_to,
     pdf_url: pdfUrl,
     sha256,
     bytes: bytes.byteLength,
@@ -203,7 +250,6 @@ async function recoverLidlPdf(supabase: any, assetUrl: string) {
 
 export async function runLeafletConnectorWithOrigin(req: Request, config: ConnectorConfig) {
   const response = await runGenericLeafletConnector(req, config);
-  if (!response.ok) return response;
 
   let payload: Record<string, unknown>;
   try {
@@ -213,62 +259,78 @@ export async function runLeafletConnectorWithOrigin(req: Request, config: Connec
   }
 
   const status = typeof payload.status === "string" ? payload.status : "";
-  if (!CAPTURE_STATUSES.has(status)) return response;
+  const viewerUrls = VIEWER_RETAILERS.has(config.retailer) ? viewerUrlsFromPayload(payload, config.retailer) : [];
+  const hasViewerFallback = viewerUrls.length > 0;
+  if (!response.ok && !hasViewerFallback) return response;
+  if (!CAPTURE_STATUSES.has(status) && !hasViewerFallback) return response;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ ...payload, ok: false, origin_error: "Supabase není nakonfigurovaný." }, { status: 503 });
   }
 
+  let origin: unknown = null;
+  let originError: string | null = null;
   try {
-    const origin = await captureCurrentLeafletOrigin(supabase, config.retailer);
-    const assetUrl = typeof payload.asset_url === "string" ? payload.asset_url : origin.asset_url;
-    if (!assetUrl && VIEWER_RETAILERS.has(config.retailer)) throw new Error("Viewer retailer nemá asset_url pro zpracování.");
+    origin = await captureCurrentLeafletOrigin(supabase, config.retailer);
+  } catch (error) {
+    originError = error instanceof Error ? error.message : String(error);
+  }
 
-    let pdf_fallback: unknown = null;
-    let page_processing: unknown = null;
+  try {
+    const recovered: unknown[] = [];
+    const pageResults: unknown[] = [];
+    const fallbackErrors: Array<{ url: string; error: string }> = [];
 
-    let extra_processing: unknown[] = [];
-    const extraViewerUrls = Array.isArray(payload.new_viewer_assets)
-      ? payload.new_viewer_assets.filter((url): url is string => typeof url === "string" && url.length > 0 && url !== assetUrl)
-      : [];
-
-    if (config.retailer === "lidl" && assetUrl) {
-      pdf_fallback = await recoverLidlPdf(supabase, assetUrl);
-    }
-
-    if (VIEWER_RETAILERS.has(config.retailer) && assetUrl && !pdf_fallback) {
-      page_processing = await ingestViewerPages(supabase, config.retailer, assetUrl);
-    }
-
-    for (const url of extraViewerUrls) {
-      if (config.retailer === "lidl") {
-        extra_processing.push({ url, pdf_fallback: await recoverLidlPdf(supabase, url) });
-      } else if (VIEWER_RETAILERS.has(config.retailer)) {
-        extra_processing.push({ url, page_processing: await ingestViewerPages(supabase, config.retailer, url) });
+    for (const url of viewerUrls) {
+      try {
+        if (SCHWARZ_RETAILERS.has(config.retailer)) {
+          const pdf = await recoverSchwarzPdf(supabase, config.retailer, url);
+          if (pdf) recovered.push(pdf);
+          else {
+            const pageResult = await ingestViewerPages(supabase, config.retailer, url);
+            if (pageResult) pageResults.push(pageResult);
+          }
+        } else if (config.retailer === "penny") {
+          const pageResult = await ingestViewerPages(supabase, config.retailer, url);
+          if (pageResult) pageResults.push(pageResult);
+        }
+      } catch (error) {
+        fallbackErrors.push({ url, error: error instanceof Error ? error.message : String(error) });
       }
     }
 
+    const primary = recovered[0] as any;
+    const fallbackSucceeded = recovered.length > 0 || pageResults.length > 0;
+    const ok = response.ok || fallbackSucceeded;
+
     return NextResponse.json({
       ...payload,
-      ...(pdf_fallback ? {
+      ok,
+      ...(primary ? {
+        status: primary.duplicate_prevented ? "unchanged" : "downloaded",
         pdf_resolved: true,
-        pdf_url: (pdf_fallback as any).pdf_url,
-        sha256: (pdf_fallback as any).sha256,
-        storage_path: (pdf_fallback as any).storage_path,
-        storage_mode: (pdf_fallback as any).storage_mode,
-        processing: (pdf_fallback as any).processing,
+        pdf_url: primary.pdf_url,
+        sha256: primary.sha256,
+        storage_path: primary.storage_path,
+        storage_mode: primary.storage_mode,
+        processing: primary.processing,
+        valid_from: primary.valid_from,
+        valid_to: primary.valid_to,
       } : {}),
       origin,
-      pdf_fallback,
-      page_processing,
-      extra_processing: extra_processing.length ? extra_processing : undefined,
-    });
+      origin_error: originError,
+      viewer_recovery: recovered,
+      page_processing: pageResults,
+      fallback_errors: fallbackErrors,
+    }, { status: ok ? 200 : response.status });
   } catch (error) {
     return NextResponse.json({
       ...payload,
       ok: false,
-      origin_error: error instanceof Error ? error.message : String(error),
+      origin,
+      origin_error: originError,
+      fallback_error: error instanceof Error ? error.message : String(error),
     }, { status: 502 });
   }
 }
