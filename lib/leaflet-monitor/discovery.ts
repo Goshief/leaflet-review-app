@@ -7,7 +7,7 @@ export type LeafletAsset = {
   score: number;
 };
 
-const NEGATIVE = /udržitelnost|udrzitelnost|výroční|vyrocni|privacy|soukrom|přístupnost|pristupnost|compliance|whistle|kariér|karier|dodavatel|media|tiskov/i;
+const NEGATIVE = /udržitelnost|udrzitelnost|výroční|vyrocni|privacy|soukrom|přístupnost|pristupnost|compliance|whistle|kariér|karier|dodavatel|media|tiskov|osobních\s+údaj|osobnich\s+udaj|ochran[ae]?\s+osobn|gdpr|cookies?|zásad[ay]|zasad[ay]|podmínk|podmink/i;
 const LEAFLET = /leták|letak|leaflet|brožur|brozur|katalog|catalog|prohlédnout|prohlednout|prolistovat|akční|akcni|nabídk|nabidk/i;
 
 function decodeHtml(value: string) {
@@ -66,7 +66,7 @@ function dateScore(textValue: string, today: Date) {
 }
 
 function retailerScore(retailer: RetailerId, url: string, label: string) {
-  const hay = `${label} ${url}`;
+  const hay = `${label} ${safeDecodeUri(url)}`;
   if (NEGATIVE.test(hay)) return -1000;
   let score = LEAFLET.test(hay) ? 20 : 0;
   const isPdf = /\.pdf(?:$|[?#])/i.test(url);
@@ -75,18 +75,25 @@ function retailerScore(retailer: RetailerId, url: string, label: string) {
     if (/lidl\.cz\/l\/cs\/letak\//i.test(url)) score += 100;
     if (/lidl\.cz\/c\/akcni-letak/i.test(url)) score += 25;
     if (/do letáku|prolistovat brožuru|akční leták/i.test(label)) score += 30;
+    if (/lidl\.cz\/(?:user-api|c\/(?:whatsapp|ctvrtecni-nabidka|vikendova-nabidka|pondelni-nabidka))/i.test(url)) score -= 80;
   } else if (retailer === "penny") {
-    if (/files\.rewe\.co\.at\/PennyIntLeaflet\/CZ\//i.test(url)) score += 120;
+    if (/files\.rewe\.co\.at\/PennyIntLeaflet\/CZ\//i.test(url)) score += 160;
     if (/prohlédnout/i.test(label)) score += 30;
+    if (/penny\.cz\/nabidky\/?$/i.test(url)) return -1000;
   } else if (retailer === "kaufland") {
-    if (/leaflets\.kaufland\.com\/cz-CZ\//i.test(url)) score += 120;
-    if (/assets\.leaflets\.schwarz/i.test(url)) score += 140;
+    if (/leaflets\.kaufland\.com\/cz-CZ\//i.test(url)) score += 160;
+    if (/assets\.leaflets\.schwarz/i.test(url)) score += 180;
     if (/Akční nabídka/i.test(label)) score += 35;
     if (/Spotřební zboží|Vyvážený nákup/i.test(label)) score -= 15;
+    if (/prodejny\.kaufland\.cz\/(?:nabidka|aktualne\/servis)\//i.test(url)) score -= 80;
   } else if (retailer === "billa") {
     if (/view\.publitas\.com\/.*\.pdf/i.test(url)) score += 160;
     else if (/view\.publitas\.com\/billa-cz/i.test(url)) score += 120;
     if (/stáhnout pdf|velký leták|aktuální leták/i.test(label)) score += 40;
+  } else if (retailer === "globus") {
+    if (/globus\.cz\/globus\/letaky\/akcni-letak-/i.test(url)) score += 180;
+    // Branch landing pages contain privacy PDFs and are not leaflet documents themselves.
+    if (/globus\.cz\/(?!globus\/)[^/]+\/letaky\/?(?:[?#].*)?$/i.test(url)) return -1000;
   }
   return score;
 }
