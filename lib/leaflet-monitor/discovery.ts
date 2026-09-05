@@ -7,8 +7,9 @@ export type LeafletAsset = {
   score: number;
 };
 
-const NEGATIVE = /udržitelnost|udrzitelnost|výroční|vyrocni|privacy|soukrom|přístupnost|pristupnost|compliance|whistle|kariér|karier|dodavatel|media|tiskov|osobních\s+údaj|osobnich\s+udaj|ochran[ae]?\s+osobn|gdpr|cookies?|zásad[ay]|zasad[ay]|podmínk|podmink/i;
+const NEGATIVE = /udržitelnost|udrzitelnost|výroční|vyrocni|privacy|soukrom|přístupnost|pristupnost|compliance|whistle|kariér|karier|dodavatel|media|tiskov|osobních\s+údaj|osobnich\s+udaj|ochran[ae]?\s+osobn|gdpr|cookies?|zásad[ay]|zasad[ay]|podmínk|podmink|reklamační|reklamacni|reklamační\s+řád|reklamacni\s+rad|obchodní\s+podmín|obchodni\s+podmin|informace-o-zpracovani|zpracovani-a-ochrane/i;
 const LEAFLET = /leták|letak|leaflet|brožur|brozur|katalog|catalog|prohlédnout|prohlednout|prolistovat|akční|akcni|nabídk|nabidk/i;
+const VIEWER_HOST = /(?:publitas\.com|leaflets\.kaufland\.com|files\.rewe\.co\.at|letak\.tetadrogerie\.cz|ecpaper|leaflet)/i;
 
 function decodeHtml(value: string) {
   return value
@@ -25,11 +26,32 @@ function safeDecodeUri(value: string) {
 
 function links(html: string, base: string) {
   const out: Array<{ url: string; label: string }> = [];
+  const seen = new Set<string>();
+  const add = (rawValue: string, label = "") => {
+    const raw = decodeHtml(rawValue || "");
+    try {
+      const url = new URL(raw, base).toString();
+      if (/\.(?:jpe?g|png|gif|webp|svg|ico)(?:$|[?#])/i.test(url)) return;
+      const key = `${url}\n${label}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ url, label: decodeHtml(label).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() });
+    } catch {}
+  };
+
   for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const raw = decodeHtml(match[1] || "");
-    const label = decodeHtml((match[2] || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
-    try { out.push({ url: new URL(raw, base).toString(), label }); } catch {}
+    add(match[1] || "", match[2] || "");
   }
+
+  // Some leaflet sites place the viewer in an iframe or in a JS/data attribute rather
+  // than a normal anchor. Only accept values that already look leaflet/viewer-related.
+  for (const match of html.matchAll(/(?:src|data-url|data-href|data-link|viewerUrl|viewer_url)["']?\s*[:=]\s*["']([^"']+)["']/gi)) {
+    const raw = match[1] || "";
+    const decoded = decodeHtml(raw);
+    if (!LEAFLET.test(decoded) && !VIEWER_HOST.test(decoded) && !/\.pdf(?:$|[?#])/i.test(decoded)) continue;
+    add(raw, "viewer");
+  }
+
   return out;
 }
 
@@ -92,8 +114,25 @@ function retailerScore(retailer: RetailerId, url: string, label: string) {
     if (/stáhnout pdf|velký leták|aktuální leták/i.test(label)) score += 40;
   } else if (retailer === "globus") {
     if (/globus\.cz\/globus\/letaky\/akcni-letak-/i.test(url)) score += 180;
+    if (/globus\.cz\/globus\/letaky\/aktualni/i.test(url)) score += 120;
     // Branch landing pages contain privacy PDFs and are not leaflet documents themselves.
     if (/globus\.cz\/(?!globus\/)[^/]+\/letaky\/?(?:[?#].*)?$/i.test(url)) return -1000;
+  } else if (retailer === "rossmann") {
+    // Rossmann exposes a real leaflet PDF next to a Publitas viewer. Prefer that PDF;
+    // generic viewer HTML also contains unrelated legal PDFs.
+    if (/rossmann\.cz\/obsah\/[^/]*-pdf-[^/]*\/akcni-letak/i.test(url)) score += 240;
+    if (/rossmann\.cz\/obsah\/publitas\/.*akcni-letak/i.test(url)) score += 120;
+    if (/rossmann\.cz\/prihlaseni/i.test(url)) return -1000;
+  } else if (retailer === "teta") {
+    if (/letak\.tetadrogerie\.cz\//i.test(url)) score += 220;
+    if (/tetadrogerie\.cz\/akce\/letak/i.test(url)) score += 80;
+    if (/zobrazit leták|zobrazit letak/i.test(label)) score += 50;
+  } else if (retailer === "albert") {
+    if (/supermarket.*leták|supermarket.*letak|hypermarket.*leták|hypermarket.*letak/i.test(hay)) score += 100;
+    if (/aktuální-letáky|aktualni-letaky/i.test(url)) score += 20;
+  } else if (retailer === "tesco") {
+    if (/akcni-nabidky\/letaky-a-katalogy/i.test(url)) score += 60;
+    if (/prohlédnout on-line|stáhnout|stahnout|akční leták|akcni letak/i.test(label)) score += 80;
   }
   return score;
 }
