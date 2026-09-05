@@ -19,61 +19,118 @@ const LABELS: Record<string, RegExp[]> = {
   teta: [/leták/i, /akční leták/i, /stáhnout/i],
 };
 
-async function publishCoverAndAlbertIfNeeded(retailer: string, payload: Record<string, unknown>) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) return { published: false, reason: "supabase_missing" };
+type PublishedAsset = {
+  storagePath: string;
+  sha256: string | null;
+  pdfUrl: string | null;
+  validFrom: string | null;
+  validTo: string | null;
+};
 
-  const storagePath = typeof payload.storage_path === "string" ? payload.storage_path : null;
-  const sha256 = typeof payload.sha256 === "string" ? payload.sha256 : null;
-  const pdfUrl = typeof payload.pdf_url === "string" ? payload.pdf_url : null;
-  if (!storagePath) return { published: false, reason: "no_stored_pdf" };
+function asString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function assetFromRow(row: Record<string, unknown>): PublishedAsset | null {
+  const storagePath = asString(row.storage_path);
+  if (!storagePath) return null;
+  const identity = row.identity && typeof row.identity === "object" ? row.identity as Record<string, unknown> : {};
+  return {
+    storagePath,
+    sha256: asString(row.sha256),
+    pdfUrl: asString(row.pdf_url),
+    validFrom: asString(identity.valid_from) ?? asString(row.valid_from),
+    validTo: asString(identity.valid_to) ?? asString(row.valid_to),
+  };
+}
+
+function publishedAssets(payload: Record<string, unknown>) {
+  const out: PublishedAsset[] = [];
+  const seen = new Set<string>();
+  const add = (asset: PublishedAsset | null) => {
+    if (!asset || seen.has(asset.storagePath)) return;
+    seen.add(asset.storagePath);
+    out.push(asset);
+  };
+  add(assetFromRow(payload));
+  if (Array.isArray(payload.leaflets)) {
+    for (const row of payload.leaflets) {
+      if (row && typeof row === "object") add(assetFromRow(row as Record<string, unknown>));
+    }
+  }
+  return out;
+}
+
+async function publishOne(retailer: string, asset: PublishedAsset) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return { published: false, reason: "supabase_missing", storage_path: asset.storagePath };
 
   if (retailer === "albert") {
     const { data: existing } = await supabase
       .from("leaflet_documents")
       .select("id")
       .eq("storage_bucket", "leaflet-intake")
-      .eq("storage_path", storagePath)
+      .eq("storage_path", asset.storagePath)
       .maybeSingle();
     if (!existing?.id) {
       await processLeafletPdf({
         supabase,
         bucket: "leaflet-intake",
-        path: storagePath,
+        path: asset.storagePath,
         retailer,
-        sourceUrl: pdfUrl,
+        sourceUrl: asset.pdfUrl,
         force: false,
       });
     }
   }
 
-  if (!sha256) return { published: true, cover: false };
-  const { data: intake } = await supabase
-    .from("leaflet_pdf_intake")
-    .select("batch_id")
-    .eq("store_id", retailer)
-    .eq("pdf_sha256", sha256)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!intake?.batch_id) return { published: true, cover: false };
+  const update: Record<string, unknown> = {};
+  if (asset.validFrom && asset.validTo) {
+    update.valid_from = asset.validFrom;
+    update.valid_to = asset.validTo;
+  }
 
-  const { data: pages } = await supabase
-    .from("leaflet_pdf_pages")
-    .select("page_no,image_storage_path")
-    .eq("batch_id", intake.batch_id)
-    .order("page_no", { ascending: true });
-  const cover = (pages ?? []).find((page: any) => Number(page.page_no) === 1)?.image_storage_path ?? null;
-  const pageCount = (pages ?? []).length || null;
-  if (cover) {
+  let cover: string | null = null;
+  let pageCount: number | null = null;
+  if (asset.sha256) {
+    const { data: intake } = await supabase
+      .from("leaflet_pdf_intake")
+      .select("batch_id")
+      .eq("store_id", retailer)
+      .eq("pdf_sha256", asset.sha256)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (intake?.batch_id) {
+      const { data: pages } = await supabase
+        .from("leaflet_pdf_pages")
+        .select("page_no,image_storage_path")
+        .eq("batch_id", intake.batch_id)
+        .order("page_no", { ascending: true });
+      cover = (pages ?? []).find((page: any) => Number(page.page_no) === 1)?.image_storage_path ?? null;
+      pageCount = (pages ?? []).length || null;
+      if (cover) update.cover_storage_path = cover;
+      if (pageCount) update.page_count = pageCount;
+    }
+  }
+
+  if (Object.keys(update).length) {
     await supabase
       .from("leaflet_documents")
-      .update({ cover_storage_path: cover, ...(pageCount ? { page_count: pageCount } : {}) })
+      .update(update)
       .eq("retailer_id", retailer)
       .eq("storage_bucket", "leaflet-intake")
-      .eq("storage_path", storagePath);
+      .eq("storage_path", asset.storagePath);
   }
-  return { published: true, cover: Boolean(cover), page_count: pageCount };
+
+  return {
+    published: true,
+    storage_path: asset.storagePath,
+    cover: Boolean(cover),
+    page_count: pageCount,
+    valid_from: asset.validFrom,
+    valid_to: asset.validTo,
+  };
 }
 
 export async function GET(
@@ -103,7 +160,9 @@ export async function GET(
   if (!response.ok) return response;
 
   try {
-    const publication = await publishCoverAndAlbertIfNeeded(retailer, payload);
+    const assets = publishedAssets(payload);
+    const publication = [];
+    for (const asset of assets) publication.push(await publishOne(retailer, asset));
     return NextResponse.json({ ...payload, publication });
   } catch (error) {
     return NextResponse.json({
