@@ -232,6 +232,8 @@ export async function ingestViewerPages(s: any, retailer: RetailerId, viewerUrl:
 
   for (const page of manifest.pages) {
     const state = byPage.get(page.page_no) as any;
+    if (state?.status === "completed") continue;
+
     const now = new Date().toISOString();
     const { error: startError } = await s.from("leaflet_page_processing").update({
       status: "processing",
@@ -268,7 +270,7 @@ export async function ingestViewerPages(s: any, retailer: RetailerId, viewerUrl:
         updated_at: doneAt,
       }).eq("leaflet_id", doc.id).eq("page_no", page.page_no);
       if (doneError) throw new Error(doneError.message);
-      if (state?.status !== "completed") newlyCompleted++;
+      newlyCompleted++;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await s.from("leaflet_page_processing").update({
