@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { RunLeafletButton } from "./RunLeafletButton";
+import { RunAllLeafletsButton } from "./RunAllLeafletsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,10 @@ export default async function LeafletAdminPage() {
     return { id, name, retailerDocs, activeDocs, latestDoc, latestIntake, pageReady, coverReady, status };
   });
 
+  const okCount = rows.filter((row) => row.status === "OK").length;
+  const problemCount = rows.length - okCount;
+  const activeCount = rows.reduce((sum, row) => sum + row.activeDocs.length, 0);
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1500px]">
@@ -86,7 +91,16 @@ export default async function LeafletAdminPage() {
             <h1 className="mt-2 text-3xl font-black">12 obchodů · crawler · PDF · platnost · stránky</h1>
             <p className="mt-2 text-sm text-slate-600">PDF se ukládají do Supabase Storage bucketu <code>leaflet-intake</code>. Originál archivu: <code>leaflets/&lt;obchod&gt;/&lt;rok&gt;/&lt;batch&gt;/original.pdf</code>. Publikační PDF: <code>&lt;obchod&gt;/&lt;obchod&gt;-YYYY-MM-DD__HASH.pdf</code>.</p>
           </div>
-          <Link href="/" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">Zpět</Link>
+          <div className="flex flex-wrap items-end gap-3">
+            <RunAllLeafletsButton />
+            <Link href="/" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">Zpět</Link>
+          </div>
+        </div>
+
+        <div className="mb-6 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-emerald-700">Funkční</div><div className="mt-1 text-3xl font-black text-emerald-950">{okCount}/12</div></div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><div className="text-xs font-black uppercase tracking-wide text-amber-700">K opravě</div><div className="mt-1 text-3xl font-black text-amber-950">{problemCount}</div></div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4"><div className="text-xs font-black uppercase tracking-wide text-slate-600">Aktivní dokumenty</div><div className="mt-1 text-3xl font-black">{activeCount}</div></div>
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -98,9 +112,9 @@ export default async function LeafletAdminPage() {
                 <th className="px-4 py-3">Aktivní</th>
                 <th className="px-4 py-3">Stránky</th>
                 <th className="px-4 py-3">Cover</th>
-                <th className="px-4 py-3">Poslední intake</th>
+                <th className="px-4 py-3">Poslední kontrola</th>
                 <th className="px-4 py-3">Platnost</th>
-                <th className="px-4 py-3">Storage</th>
+                <th className="px-4 py-3">Storage / zdroj</th>
                 <th className="px-4 py-3">Akce</th>
               </tr>
             </thead>
