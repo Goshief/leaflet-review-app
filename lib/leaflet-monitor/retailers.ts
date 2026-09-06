@@ -15,7 +15,7 @@ export const RETAILERS: readonly RetailerConfig[] = [
   { id: "globus", name: "Globus", source_url: "https://www.globus.cz/globus/letaky", fetch_url: "https://www.globus.cz/globus/letaky", connector: "active" },
   { id: "kaufland", name: "Kaufland", source_url: "https://www.kaufland.cz/", fetch_url: "https://prodejny.kaufland.cz/letak.html", connector: "active" },
   { id: "kosik", name: "Košík", source_url: "https://www.kosik.cz/l20404-w26", fetch_url: "https://www.kosik.cz/l20404-w26", connector: "active" },
-  { id: "lidl", name: "Lidl", source_url: "https://www.lidl.cz/", fetch_url: "https://www.lidl.cz/", connector: "active" },
+  { id: "lidl", name: "Lidl", source_url: "https://www.lidl.cz/c/akcni-letak/s10008644", fetch_url: "https://www.lidl.cz/c/akcni-letak/s10008644", connector: "active" },
   { id: "penny", name: "Penny", source_url: "https://www.penny.cz/nabidky/letaky", fetch_url: "https://www.penny.cz/nabidky/letaky", connector: "active" },
   { id: "rohlik", name: "Rohlík", source_url: "https://www.rohlik.cz/cs-CZ/cenove-trhaky", fetch_url: "https://www.rohlik.cz/cs-CZ/cenove-trhaky", connector: "active" },
   { id: "rossmann", name: "Rossmann", source_url: "https://www.rossmann.cz/obsah/akce-a-letaky", fetch_url: "https://www.rossmann.cz/obsah/akce-a-letaky", connector: "active" },
