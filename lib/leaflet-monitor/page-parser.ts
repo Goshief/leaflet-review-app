@@ -76,7 +76,10 @@ export type PageImageReadyContext = {
 
 export type ExtractPageFn = (req: LeafletPageExtractRequest) => Promise<LeafletPageExtractResponse>;
 
-const IMPORT_RETAILERS = new Set(["lidl", "kaufland", "albert", "billa", "penny"]);
+const IMPORT_RETAILERS = new Set([
+  "albert", "billa", "dm", "globus", "kaufland", "kosik",
+  "lidl", "penny", "rohlik", "rossmann", "tesco", "teta",
+]);
 
 export function shouldAutoParsePage(status: PdfPageRecord["processing_status"]): boolean {
   return status === "rendered" || status === "queued" || status === "parsing";
