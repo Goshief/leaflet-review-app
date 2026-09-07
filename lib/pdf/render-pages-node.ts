@@ -41,14 +41,25 @@ async function loadPdfDocument(bytes: Uint8Array) {
   } as never).promise;
 }
 
+function defaultRenderScale(): number {
+  const raw = Number(process.env.LEAFLET_PDF_RENDER_SCALE ?? "0.85");
+  if (!Number.isFinite(raw)) return 0.85;
+  return Math.min(1, Math.max(0.5, raw));
+}
+
 /**
  * Server-side: PDF → one PNG per page. Does not extract products.
+ *
+ * Keep the production default deliberately below 1x. Page PNGs are temporary
+ * parser/review artefacts and were the fastest-growing Supabase Storage class.
+ * The old 1.35x default used ~2.5x as many pixels as 0.85x for every page.
  */
 export async function renderPdfPagesToPng(
   bytes: Uint8Array,
   options?: { scale?: number },
 ): Promise<RenderedPdfPage[]> {
-  const scale = options?.scale ?? 1.35;
+  const requestedScale = options?.scale ?? defaultRenderScale();
+  const scale = Math.min(1, Math.max(0.5, requestedScale));
   const doc = await loadPdfDocument(bytes);
   try {
     const pages: RenderedPdfPage[] = [];
