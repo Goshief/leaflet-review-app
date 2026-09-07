@@ -21,6 +21,6 @@
     { "path": "/api/cron/fetch-lidl-products", "schedule": "35 9 * * *" },
     { "path": "/api/cron/fetch-rossmann-products", "schedule": "43 9 * * *" },
     { "path": "/api/cron/fetch-rohlik-products", "schedule": "51 9 * * *" },
-    { "path": "/api/cron/storage-cleanup", "schedule": "40 11 * * *" }
+    { "path": "/api/cron/storage-cleanup", "schedule": "50 11 * * *" }
   ]
 }
