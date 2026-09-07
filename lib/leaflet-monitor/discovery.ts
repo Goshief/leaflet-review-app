@@ -10,6 +10,7 @@ export type LeafletAsset = {
 const NEGATIVE = /udržitelnost|udrzitelnost|výroční|vyrocni|privacy|soukrom|přístupnost|pristupnost|compliance|whistle|kariér|karier|dodavatel|media|tiskov|osobních\s+údaj|osobnich\s+udaj|ochran[ae]?\s+osobn|gdpr|cookies?|zásad[ay]|zasad[ay]|podmínk|podmink|reklamační|reklamacni|reklamační\s+řád|reklamacni\s+rad|obchodní\s+podmín|obchodni\s+podmin|informace-o-zpracovani|zpracovani-a-ochrane/i;
 const LEAFLET = /leták|letak|leaflet|brožur|brozur|katalog|catalog|prohlédnout|prohlednout|prolistovat|akční|akcni|nabídk|nabidk/i;
 const VIEWER_HOST = /(?:publitas\.com|leaflets\.kaufland\.com|files\.rewe\.co\.at|letak\.tetadrogerie\.cz|ecpaper|leaflet)/i;
+const HARD_REJECT_URL = /^(?:mailto:|tel:|javascript:)|(?:^|\.)wa\.me\/|\.(?:js|mjs|css|map)(?:$|[?#])|\/user-api(?:\/|$)|\/privacy(?:\/|$)|\/cookies?(?:\/|$)|\/gdpr(?:\/|$)|\/reklamac|\/obchodni-podm|\/soukromi(?:\/|$)/i;
 
 function decodeHtml(value: string) {
   return value
@@ -27,13 +28,19 @@ function plainText(value: string) {
   return decodeHtml(value).replace(/<script\b[\s\S]*?<\/script>/gi, " ").replace(/<style\b[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function hardRejectedUrl(url: string) {
+  return HARD_REJECT_URL.test(url);
+}
+
 function links(html: string, base: string) {
   const out: Array<{ url: string; label: string }> = [];
   const seen = new Set<string>();
   const add = (rawValue: string, label = "") => {
     const raw = decodeHtml(rawValue || "");
+    if (HARD_REJECT_URL.test(raw)) return;
     try {
       const url = new URL(raw, base).toString();
+      if (hardRejectedUrl(url)) return;
       if (/\.(?:jpe?g|png|gif|webp|svg|ico)(?:$|[?#])/i.test(url)) return;
       const cleanLabel = plainText(label);
       const key = `${url}\n${cleanLabel}`;
@@ -56,6 +63,7 @@ function links(html: string, base: string) {
   for (const match of html.matchAll(/(?:src|data-url|data-href|data-link|viewerUrl|viewer_url)["']?\s*[:=]\s*["']([^"']+)["']/gi)) {
     const raw = match[1] || "";
     const decoded = decodeHtml(raw);
+    if (HARD_REJECT_URL.test(decoded)) continue;
     if (!LEAFLET.test(decoded) && !VIEWER_HOST.test(decoded) && !/\.pdf(?:$|[?#])/i.test(decoded)) continue;
     const index = match.index ?? 0;
     const context = plainText(html.slice(Math.max(0, index - 500), Math.min(html.length, index + match[0].length + 250)));
@@ -78,10 +86,19 @@ function isSelfLink(url: string, base: string) {
   return canonicalPage(url) === canonicalPage(base);
 }
 
+function pragueDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value || "0");
+  return { y: value("year"), m: value("month"), d: value("day") };
+}
+
 function dateScore(textValue: string, today: Date) {
-  const y = today.getUTCFullYear();
-  const m = today.getUTCMonth() + 1;
-  const d = today.getUTCDate();
+  const { y, m, d } = pragueDateParts(today);
   const text = safeDecodeUri(textValue).toLowerCase();
   let score = text.includes(String(y)) ? 5 : 0;
   const dd = String(d).padStart(2, "0");
@@ -98,6 +115,7 @@ function dateScore(textValue: string, today: Date) {
 }
 
 function retailerScore(retailer: RetailerId, url: string, label: string) {
+  if (hardRejectedUrl(url)) return -1000;
   const hay = `${label} ${safeDecodeUri(url)}`;
   if (NEGATIVE.test(hay)) return -1000;
   let score = LEAFLET.test(hay) ? 20 : 0;
@@ -107,7 +125,8 @@ function retailerScore(retailer: RetailerId, url: string, label: string) {
     if (/lidl\.cz\/l\/cs\/letak\//i.test(url)) score += 100;
     if (/lidl\.cz\/c\/akcni-letak/i.test(url)) score += 25;
     if (/do letáku|prolistovat brožuru|akční leták/i.test(label)) score += 30;
-    if (/lidl\.cz\/(?:user-api|c\/(?:whatsapp|ctvrtecni-nabidka|vikendova-nabidka|pondelni-nabidka))/i.test(url)) score -= 80;
+    if (/lidl\.cz\/(?:user-api|c\/(?:whatsapp|ctvrtecni-nabidka|vikendova-nabidka|pondelni-nabidka|lidl-plus|privatni-znacky|kategorie)|mla\/)/i.test(url)) return -1000;
+    if (!/lidl\.cz\/l\/cs\/letak\//i.test(url) && !/lidl\.cz\/c\/akcni-letak/i.test(url)) score -= 100;
   } else if (retailer === "penny") {
     if (/files\.rewe\.co\.at\/PennyIntLeaflet\/CZ\//i.test(url)) score += 160;
     if (/prohlédnout/i.test(label)) score += 30;
@@ -118,6 +137,7 @@ function retailerScore(retailer: RetailerId, url: string, label: string) {
     if (/Akční nabídka/i.test(label)) score += 35;
     if (/Spotřební zboží|Vyvážený nákup/i.test(label)) score -= 15;
     if (/prodejny\.kaufland\.cz\/(?:nabidka|aktualne\/servis)\//i.test(url)) score -= 80;
+    if (/prodejny\.kaufland\.cz\/xtra\.html/i.test(url) || /^https:\/\/www\.kaufland\.cz\/?$/i.test(url)) return -1000;
   } else if (retailer === "billa") {
     if (/view\.publitas\.com\/.*\.pdf/i.test(url)) score += 160;
     else if (/view\.publitas\.com\/billa-cz/i.test(url)) score += 120;
@@ -130,13 +150,16 @@ function retailerScore(retailer: RetailerId, url: string, label: string) {
     if (/rossmann\.cz\/obsah\/[^/]*-pdf-[^/]*\/akcni-letak/i.test(url)) score += 240;
     if (/rossmann\.cz\/obsah\/publitas\/.*akcni-letak/i.test(url)) score += 120;
     if (/rossmann\.cz\/prihlaseni|adform\.net/i.test(url)) return -1000;
+    if (/rossmann\.cz\/obsah\/soukromi-a-podminky/i.test(url)) return -1000;
   } else if (retailer === "teta") {
     if (/letak\.tetadrogerie\.cz\//i.test(url)) score += 220;
     if (/tetadrogerie\.cz\/akce\/letak/i.test(url)) score += 80;
     if (/zobrazit leták|zobrazit letak/i.test(label)) score += 50;
+    if (/skincare\.tetadrogerie\.cz\/assets\/brozura\.pdf/i.test(url)) return -1000;
   } else if (retailer === "albert") {
     if (/supermarket.*leták|supermarket.*letak|hypermarket.*leták|hypermarket.*letak/i.test(hay)) score += 100;
     if (/aktuální-letáky|aktualni-letaky/i.test(url)) score += 20;
+    if (/albert\.cz\/(?:aplikace|recepty|magazin-albert|hit-mesice|prodejny-kontakt|albert-online)(?:[/?#]|$)/i.test(url)) return -1000;
   } else if (retailer === "tesco") {
     if (/akcni-nabidky\/letaky-a-katalogy/i.test(url)) score += 60;
     if (/prohlédnout on-line|stáhnout|stahnout|akční leták|akcni letak/i.test(label)) score += 80;
@@ -148,7 +171,7 @@ export function discoverLeafletAssets(html: string, base: string, retailer: Reta
   const seen = new Set<string>();
   const candidates: LeafletAsset[] = [];
   for (const link of links(html, base)) {
-    if (isSelfLink(link.url, base) || seen.has(link.url)) continue;
+    if (isSelfLink(link.url, base) || seen.has(link.url) || hardRejectedUrl(link.url)) continue;
     seen.add(link.url);
     const score = retailerScore(retailer, link.url, link.label) + dateScore(`${link.label} ${link.url}`, now);
     if (score <= 0) continue;
