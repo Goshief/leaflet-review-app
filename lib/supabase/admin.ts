@@ -13,10 +13,18 @@ export function getSupabaseAdmin(): SupabaseClient | null {
   if (cached) return cached;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const projectRef = (() => {
+    try {
+      return url ? new URL(url).hostname.split(".")[0] : null;
+    } catch {
+      return null;
+    }
+  })();
 
   console.info("[supabase-admin-init]", {
     has_url: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
     has_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    project_ref: projectRef,
     node_env: process.env.NODE_ENV,
   });
 
@@ -31,12 +39,14 @@ export function getSupabaseAdmin(): SupabaseClient | null {
     console.info("[supabase-admin] init ok", {
       has_url: true,
       has_service_role_key: true,
+      project_ref: projectRef,
     });
     return cached;
   } catch (e) {
     console.error("[supabase-admin] init failed", {
       has_url: Boolean(url),
       has_service_role_key: Boolean(key),
+      project_ref: projectRef,
       error: e instanceof Error ? e.message : String(e),
     });
     throw e;
