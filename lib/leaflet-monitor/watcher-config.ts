@@ -19,9 +19,10 @@ export type WatchedRetailerId = (typeof WATCHED_RETAILERS)[number];
 // Production safety defaults: each retailer is checked at most once per day
 // unless an operator explicitly overrides the interval through the environment.
 export const DEFAULT_WATCHER_INTERVAL_HOURS = 24;
-// Only inspect the strongest few leaflet candidates per run. This prevents one
-// malformed retailer page from causing dozens of downloads/storage operations.
-export const WATCHER_ASSET_LIMIT = 3;
+// Hard safety limit: process at most one strongest leaflet candidate per retailer
+// per scheduled run. This keeps automatic discovery running while preventing
+// malformed retailer pages from creating bursts of downloads and storage writes.
+export const WATCHER_ASSET_LIMIT = 1;
 
 /** Daily UTC schedules. Vercel Hobby allows daily cron cadence. */
 export const WATCHER_CRON_SCHEDULES: Record<WatchedRetailerId, string> = {
