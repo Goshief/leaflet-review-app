@@ -2,17 +2,19 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
-  if (
-    request.nextUrl.pathname.startsWith("/api/cron/") &&
-    process.env.ALLOW_AUTOMATED_CRAWLERS !== "1"
-  ) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "Automated crawlers are disabled to prevent unexpected Supabase egress.",
-      },
-      { status: 503 }
-    );
+  if (request.nextUrl.pathname.startsWith("/api/cron/")) {
+    const manual = request.nextUrl.searchParams.get("manual") === "1";
+    const secret = process.env.CRON_SECRET?.trim();
+    const auth = request.headers.get("authorization") || "";
+
+    // Scheduled runs must be genuine Vercel Cron requests. Manual operator
+    // runs are still allowed through and are authorized by the route itself.
+    if (!manual && (!secret || auth !== `Bearer ${secret}`)) {
+      return NextResponse.json(
+        { ok: false, error: "Unauthorized cron request." },
+        { status: 401 }
+      );
+    }
   }
 
   return await updateSession(request);
