@@ -23,6 +23,7 @@
     { "path": "/api/cron/fetch-rossmann-products", "schedule": "43 9 * * 1,3,5" },
     { "path": "/api/cron/fetch-rohlik-products", "schedule": "51 9 * * 1,3,5" },
 
-    { "path": "/api/cron/storage-cleanup", "schedule": "55 15 * * *" }
+    { "path": "/api/cron/storage-recovery", "schedule": "12 16 * * *" },
+    { "path": "/api/cron/storage-cleanup", "schedule": "50 11 * * 0" }
   ]
 }
