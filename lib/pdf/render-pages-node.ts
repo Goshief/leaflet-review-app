@@ -42,17 +42,18 @@ async function loadPdfDocument(bytes: Uint8Array) {
 }
 
 function defaultRenderScale(): number {
-  const raw = Number(process.env.LEAFLET_PDF_RENDER_SCALE ?? "0.85");
-  if (!Number.isFinite(raw)) return 0.85;
+  const raw = Number(process.env.LEAFLET_PDF_RENDER_SCALE ?? "0.65");
+  if (!Number.isFinite(raw)) return 0.65;
   return Math.min(1, Math.max(0.5, raw));
 }
 
 /**
  * Server-side: PDF → one PNG per page. Does not extract products.
  *
- * Keep the production default deliberately below 1x. Page PNGs are temporary
- * parser/review artefacts and were the fastest-growing Supabase Storage class.
- * The old 1.35x default used ~2.5x as many pixels as 0.85x for every page.
+ * Keep the production default deliberately low because page PNGs are temporary
+ * parser/review artefacts and are the fastest-growing Supabase Storage class.
+ * 0.65x uses roughly 42% of the pixels of a 1.0x render while keeping enough
+ * detail for the OCR/vision pipeline in normal leaflet layouts.
  */
 export async function renderPdfPagesToPng(
   bytes: Uint8Array,
