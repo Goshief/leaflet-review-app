@@ -16,16 +16,22 @@ function chunks<T>(items: T[], size: number): T[][] {
 }
 
 export async function GET(req: NextRequest) {
+  const startedAt = new Date().toISOString();
+  console.info("[storage-cleanup] start", { startedAt });
+
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) {
+    console.error("[storage-cleanup] CRON_SECRET missing");
     return NextResponse.json({ ok: false, error: "CRON_SECRET is not configured" }, { status: 503 });
   }
   if ((req.headers.get("authorization") || "") !== `Bearer ${secret}`) {
+    console.error("[storage-cleanup] unauthorized");
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
+    console.error("[storage-cleanup] Supabase admin missing");
     return NextResponse.json({ ok: false, error: "Supabase admin is not configured" }, { status: 503 });
   }
 
@@ -42,11 +48,13 @@ export async function GET(req: NextRequest) {
     .limit(MAX_CANDIDATES);
 
   if (candidateError) {
+    console.error("[storage-cleanup] candidate query failed", candidateError.message);
     return NextResponse.json({ ok: false, error: `candidate query: ${candidateError.message}` }, { status: 500 });
   }
 
   const rows = (candidates ?? []).filter((row) => row.page_id && row.image_storage_path);
   if (!rows.length) {
+    console.info("[storage-cleanup] complete", { candidates: 0, protected: 0, deleted: 0 });
     return NextResponse.json({ ok: true, candidates: 0, protected: 0, deleted: 0 });
   }
 
@@ -61,6 +69,7 @@ export async function GET(req: NextRequest) {
       .in("review_status", ["pending", "needs_review"]);
 
     if (reviewError) {
+      console.error("[storage-cleanup] review query failed", reviewError.message);
       return NextResponse.json({ ok: false, error: `review query: ${reviewError.message}` }, { status: 500 });
     }
     for (const row of openReview ?? []) {
@@ -93,12 +102,14 @@ export async function GET(req: NextRequest) {
     deleted += batch.length;
   }
 
-  return NextResponse.json({
+  const result = {
     ok: errors.length === 0,
     cutoff,
     candidates: rows.length,
     protected: protectedIds.size,
     deleted,
     errors,
-  }, { status: errors.length ? 207 : 200 });
+  };
+  console.info("[storage-cleanup] complete", result);
+  return NextResponse.json(result, { status: errors.length ? 207 : 200 });
 }
