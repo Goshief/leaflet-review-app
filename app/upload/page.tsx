@@ -1,6 +1,7 @@
 import { UploadFormStorage } from "@/components/leaflet/upload-form-storage";
 import { LeafletMonitorPanel } from "@/components/leaflet/monitor-panel";
 import { LeafletHistoryPanel } from "@/components/leaflet/history-panel";
+import { LidlBulkImport } from "@/components/leaflet/lidl-bulk-import";
 
 export default function UploadPage() {
   return (
@@ -11,6 +12,10 @@ export default function UploadPage() {
       <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-600">
         Automatika hlídá známé obchody a ruční upload zůstává jako záloha. PDF se nahrává přímo do Supabase Storage, takže velké soubory nejdou přes limit Vercelu.
       </p>
+
+      <div className="mt-8 max-w-3xl">
+        <LidlBulkImport />
+      </div>
 
       <div className="mt-8">
         <LeafletMonitorPanel />
