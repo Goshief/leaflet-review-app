@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -56,7 +53,9 @@ function parseCsv(text: string): SourceRow[] {
 async function parseSqlite(bytes: Uint8Array): Promise<SourceRow[]> {
   // Node.js SQLite is used server-side; never run untrusted SQL from an uploaded file.
   const sqliteModule = "node:" + "sqlite";
-  const { DatabaseSync } = await import(sqliteModule);
+  const [{ DatabaseSync }, { mkdtemp, rm, writeFile }, { tmpdir }, { join }] = await Promise.all([
+    import(sqliteModule), import("node:fs/promises"), import("node:os"), import("node:path"),
+  ]);
   const dir = await mkdtemp(join(tmpdir(), "setrik-lidl-"));
   const file = join(dir, "upload.sqlite3");
   try {
@@ -112,6 +111,13 @@ export async function POST(req: NextRequest) {
   const { timingSafeEqual } = await import("node:crypto");
   if (!supplied || !timingSafeEqual(expected, actual))
     return NextResponse.json({ ok: false, error: "Neplatný importní klíč." }, { status: 403 });
+  // This importer is bound to the Setrik project; never silently write into a different Supabase environment.
+  const configuredRef = (() => {
+    try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").hostname.split(".")[0]; }
+    catch { return ""; }
+  })();
+  if (configuredRef !== "qeemacnpokbklmmyidet")
+    return NextResponse.json({ ok: false, error: "Tento import je určen pouze pro projekt Supabase Setrik." }, { status: 503 });
   const client = getSupabaseAdmin();
   if (!client) return NextResponse.json({ ok: false, error: "Supabase admin není nakonfigurovaný." }, { status: 503 });
 
@@ -144,6 +150,7 @@ export async function POST(req: NextRequest) {
       }
       price(row.bezna_cena);
       price(row.klubova_cena);
+      if (typeof row.raw_json === "string" && row.raw_json) JSON.parse(row.raw_json);
       const key = canonicalKey(row);
       if (seen.has(key)) { discarded++; continue; }
       seen.add(key);
