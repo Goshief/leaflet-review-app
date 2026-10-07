@@ -1,0 +1,74 @@
+{
+  "flyers": [
+    {
+      "id": "01a0f6c1-f878-7651-8e96-7ccc3c2f8458",
+      "name": "Akční leták OD PONDĚLÍ",
+      "title": "5. 10. - 7. 10. 2026",
+      "isActive": true,
+      "pdfUrl": "https://assets.leaflets.schwarz/leaflets/pdfs/01a0f6c1-f878-7651-8e96-7ccc3c2f8458/Akcni-letak-OD-PONDELI-5-10-7-10-2026-00.pdf",
+      "fileSize": 31727945,
+      "publicThumbnail": "https://imgproxy.leaflets.schwarz/m2rjOe6-kg390SDavYU3yilXBGSsPQS6QKxxoBUdUTc/rs:fit:400:400:1/g:no/czM6Ly9sZWFmbGV0cy9pbWFnZXMvMDFhMGY2YzEtZjg3OC03NjUxLThlOTYtN2NjYzNjMmY4NDU4L3BhZ2UtMDFfMzI1ZGU5NDljYjRjOTRmYTdkMDY0M2U3ZDA5ODZhZDIucG5n.jpg",
+      "flyerUrlAbsolute": "https://www.lidl.cz/l/cs/letak/akcni-letak-od-pondeli-5-10-7-10-2026/ar/0?lf=HHZ",
+      "startDate": "2026-10-02",
+      "endDate": "2026-10-11",
+      "offerStartDate": "2026-10-05",
+      "offerEndDate": "2026-10-11"
+    },
+    {
+      "id": "01a0f6c2-e65c-7cc0-b01c-7c416ae5c0df",
+      "name": "Spotřební zboží",
+      "title": "5. 10. - 11. 10. 2026",
+      "isActive": true,
+      "pdfUrl": "https://assets.leaflets.schwarz/leaflets/pdfs/01a0f6c2-e65c-7cc0-b01c-7c416ae5c0df/Spotrebni-zbozi-5-10-11-10-2026-00.pdf",
+      "fileSize": 13205740,
+      "publicThumbnail": "https://imgproxy.leaflets.schwarz/9AY_vWBtgQrBvupmbvkb0GSapkRrjvtcaZZBwKBO5bM/rs:fit:400:400:1/g:no/czM6Ly9sZWFmbGV0cy9pbWFnZXMvMDFhMGY2YzItZTY1Yy03Y2MwLWIwMWMtN2M0MTZhZTVjMGRmL3BhZ2UtMDFfZmFhZWNkNDg0OGRjNTUxNzA2ZTJkYzA5ZjNkMTI4YzMucG5n.jpg",
+      "flyerUrlAbsolute": "https://www.lidl.cz/l/cs/letak/spotrebni-zbozi-5-10-11-10-2026/ar/0?lf=HHZ",
+      "startDate": "2026-10-02",
+      "endDate": "2026-10-11",
+      "offerStartDate": "2026-10-05",
+      "offerEndDate": "2026-10-11"
+    },
+    {
+      "id": "01a0f6c5-6a19-78e3-9791-0d2d0bed8050",
+      "name": "Akční leták OD ČTVRTKA",
+      "title": "8. 10. - 11. 10. 2026",
+      "isActive": true,
+      "pdfUrl": "https://assets.leaflets.schwarz/leaflets/pdfs/01a0f6c5-6a19-78e3-9791-0d2d0bed8050/Akcni-letak-OD-CTVRTKA-8-10-11-10-2026-00.pdf",
+      "fileSize": 27731027,
+      "publicThumbnail": "https://imgproxy.leaflets.schwarz/p6AIOn2zUc7P09Z2QrOj-DpJ20m4UevJx1Nf9IDJAvA/rs:fit:400:400:1/g:no/czM6Ly9sZWFmbGV0cy9pbWFnZXMvMDFhMGY2YzUtNmExOS03OGUzLTk3OTEtMGQyZDBiZWQ4MDUwL3BhZ2UtMDFfYTk5ZjEzYzM3ZTdlY2IzN2NhYWRkNDk0YWQ5NWJmYzgucG5n.jpg",
+      "flyerUrlAbsolute": "https://www.lidl.cz/l/cs/letak/akcni-letak-od-ctvrtka-8-10-11-10-2026/ar/0?lf=HHZ",
+      "startDate": "2026-10-02",
+      "endDate": "2026-10-11",
+      "offerStartDate": "2026-10-08",
+      "offerEndDate": "2026-10-11"
+    },
+    {
+      "id": "01a06d5e-126e-785b-998b-c19529a7f18b",
+      "name": "Dalších 130 cen v klidu.",
+      "title": "Pro čistou domácnost máme všechno",
+      "isActive": true,
+      "pdfUrl": "https://assets.leaflets.schwarz/leaflets/pdfs/01a06d5e-126e-785b-998b-c19529a7f18b/Dalsich-130-cen-v-klidu-Pro-cistou-domacnost-mame-vsechno-00.pdf",
+      "fileSize": 28773643,
+      "publicThumbnail": "https://imgproxy.leaflets.schwarz/OOxRTh_ve_x-Na10n2Fv2QEzH7_x9yKQoDOLFa_th3M/rs:fit:400:400:1/g:no/czM6Ly9sZWFmbGV0cy9pbWFnZXMvMDFhMDZkNWUtMTI2ZS03ODViLTk5OGItYzE5NTI5YTdmMThiL3BhZ2UtMDFfMDNhMGRhZjY5OGU1YzI0YThjNTM3OTEyYmYyMTdmODEucG5n.jpg",
+      "flyerUrlAbsolute": "https://www.lidl.cz/l/cs/letak/dalsich-130-cen-v-klidu-pro-cistou-domacnost-mame-vsechno/ar/0",
+      "startDate": "2026-09-04",
+      "endDate": "2026-11-30",
+      "offerStartDate": "2026-09-07",
+      "offerEndDate": "2026-11-30"
+    },
+    {
+      "id": "01a0f733-0d3c-71dc-8d62-2a023bb1cc1d",
+      "name": "Hity týdne se slevou až 2000 Kč",
+      "title": "5. 10. - 11. 10. 2026",
+      "isActive": true,
+      "pdfUrl": "https://assets.leaflets.schwarz/leaflets/pdfs/01a0f733-0d3c-71dc-8d62-2a023bb1cc1d/Hity-tydne-se-slevou-az-2000-Kc-5-10-11-10-2026-00.pdf",
+      "fileSize": 695202,
+      "publicThumbnail": "https://imgproxy.leaflets.schwarz/tfSmF27FCYLBpBhLRed1aod6BY9BzpMPD5l8DcHnV1Q/rs:fit:400:400:1/g:no/czM6Ly9sZWFmbGV0cy9pbWFnZXMvMDFhMGY3MzMtMGQzYy03MWRjLThkNjItMmEwMjNiYjFjYzFkL3BhZ2UtMV82ZThmODFiNGI0NWJjNGQzZDQ4NTg5M2JlOTExNzExMy5wbmc.jpg",
+      "flyerUrlAbsolute": "https://www.lidl.cz/l/cs/letak/hity-tydne-se-slevou-az-2000-kc-5-10-11-10-2026/ar/0",
+      "startDate": "2026-10-02",
+      "endDate": "2026-10-11",
+      "offerStartDate": "2026-10-05",
+      "offerEndDate": "2026-10-11"
+    }
+  ]
+}
