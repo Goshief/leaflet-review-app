@@ -1,0 +1,46 @@
+{
+  "flyers": [
+    {
+      "id": "01a0eea0-ae38-7793-95de-c518c13724f4",
+      "name": "Kaufland",
+      "title": "07.10.2026 - 13.10.2026",
+      "isActive": true,
+      "pdfUrl": "https://assets.leaflets.schwarz/leaflets/pdfs/01a0eea0-ae38-7793-95de-c518c13724f4/Kaufland-07-10-2026-13-10-2026-00.pdf",
+      "fileSize": 16941248,
+      "publicThumbnail": "https://imgproxy.leaflets.schwarz/BKyoO6_p4SDl7Lj-Wr7sax1BMh6MamSq_M1v14oI2RU/rs:fit:400:400:1/g:no/czM6Ly9sZWFmbGV0cy9pbWFnZXMvMDFhMGVlYTAtYWUzOC03NzkzLTk1ZGUtYzUxOGMxMzcyNGY0L3BhZ2UtMDFfNDdkNjg0M2VkMDNjZTY0OWRjYTMwZGY1OWRiNjJmZDkucG5n.jpg",
+      "flyerUrlAbsolute": "https://leaflets.kaufland.com/cz-CZ/CZ_cs_KDZ_1000_CZ41-LFT/ar/1000",
+      "startDate": "2026-10-04",
+      "endDate": "2026-10-13",
+      "offerStartDate": "2026-10-07",
+      "offerEndDate": "2026-10-13"
+    },
+    {
+      "id": "01a0fbb9-19d9-7846-8046-af670cb4c478",
+      "name": "Kaufland",
+      "title": "07.10.2026 - 13.10.2026",
+      "isActive": true,
+      "pdfUrl": "https://assets.leaflets.schwarz/leaflets/pdfs/01a0fbb9-19d9-7846-8046-af670cb4c478/Kaufland-07-10-2026-13-10-2026-00.pdf",
+      "fileSize": 2169396,
+      "publicThumbnail": "https://imgproxy.leaflets.schwarz/YpPPypZliHZjtIsFfKOih8OpLh6waGtM7rFFN32xCcQ/rs:fit:400:400:1/g:no/czM6Ly9sZWFmbGV0cy9pbWFnZXMvMDFhMGZiYjktMTlkOS03ODQ2LTgwNDYtYWY2NzBjYjRjNDc4L3BhZ2UtMV9mMzZiMjc2YmU2MzRmMjk1M2NlN2VkMjNlOTQ2YzkwMC5wbmc.jpg",
+      "flyerUrlAbsolute": "https://leaflets.kaufland.com/cz-CZ/CZ_cs_Hyper1_1000_CZ41-CL1/ar/1000",
+      "startDate": "2026-10-04",
+      "endDate": "2026-10-13",
+      "offerStartDate": "2026-10-07",
+      "offerEndDate": "2026-10-13"
+    },
+    {
+      "id": "01a0fd02-cc78-79e5-aa3a-7cdb75d575ae",
+      "name": "Kaufland",
+      "title": "07.10.2026 - 03.11.2026",
+      "isActive": true,
+      "pdfUrl": "https://assets.leaflets.schwarz/leaflets/pdfs/01a0fd02-cc78-79e5-aa3a-7cdb75d575ae/Kaufland-07-10-2026-03-11-2026-00.pdf",
+      "fileSize": 2448825,
+      "publicThumbnail": "https://imgproxy.leaflets.schwarz/SrHmVjm_bVIVUarv_hJYymAU_-ZcBWnNfJus5VICfwk/rs:fit:400:400:1/g:no/czM6Ly9sZWFmbGV0cy9pbWFnZXMvMDFhMGZkMDItY2M3OC03OWU1LWFhM2EtN2NkYjc1ZDU3NWFlL3BhZ2UtMV84YjEwYTY4MzVjZDI4YjM1MGVjYmNiYmZjMmRhYjYzNS5wbmc.jpg",
+      "flyerUrlAbsolute": "https://leaflets.kaufland.com/cz-CZ/CZ_cs_Wrapper1_1000_CZ41-CL3/ar/1000",
+      "startDate": "2026-10-04",
+      "endDate": "2026-11-03",
+      "offerStartDate": "2026-10-07",
+      "offerEndDate": "2026-11-03"
+    }
+  ]
+}

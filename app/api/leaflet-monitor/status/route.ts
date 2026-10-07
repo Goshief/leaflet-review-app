@@ -1,3 +1,5 @@
+import { isCatalogRetailer } from "@/lib/leaflet-monitor/public-catalog";
+import { getWatcherCronSchedule } from "@/lib/leaflet-monitor/watcher-config";
 import { NextResponse } from "next/server";
 import { requireOperatorApi } from "@/lib/auth/guards";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -50,6 +52,14 @@ async function writeLearning(supabase:any,state:RetailerLearningState){
     new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),
     {contentType:"application/json",upsert:true},
   );
+}
+
+function nextCatalogCheck(retailer:string):string|null {
+  if(!isCatalogRetailer(retailer))return null;
+  const [minute,hour]=getWatcherCronSchedule(retailer).split(" ").map(Number);
+  const now=new Date(), next=new Date(now); next.setUTCHours(hour,minute,0,0);
+  if(next<=now)next.setUTCDate(next.getUTCDate()+1);
+  return next.toISOString();
 }
 
 function pdfHash(name:string){return name.match(/__([a-f0-9]{16})\.pdf$/i)?.[1]?.toLowerCase()??null;}
@@ -153,7 +163,10 @@ export async function GET() {
     });
     if (checksResult.error) storageDegraded = true;
     const lastCheckName = checksResult.data?.[0]?.name ?? null;
-    const lastCheck = lastCheckName ? await readJson<any>(supabase, `_checks/${lastCheckName}`) : null;
+    const legacyCheck = lastCheckName ? await readJson<any>(supabase, `_checks/${lastCheckName}`) : null;
+    const catalogCheck = await readJson<any>(supabase, `_catalog-checks/${retailer.id}.json`);
+    const lastCheck = catalogCheck && (!legacyCheck || String(catalogCheck.checkedAt) > String(legacyCheck.checked_at))
+      ? { ...catalogCheck, checked_at: catalogCheck.checkedAt, source_page: catalogCheck.sourceUrl } : legacyCheck;
     const totalDownloadHits = learning.weekday_download_hits.reduce((sum, value) => sum + Number(value || 0), 0);
 
     rows.push({
@@ -161,16 +174,17 @@ export async function GET() {
       pdf_count: uniquePdfs.length,
       latest_pdf: uniquePdfs[0]?.name ?? null,
       last_check: lastCheck,
+      catalog: catalogCheck ? { status: catalogCheck.status, checked_at: catalogCheck.checkedAt, published: catalogCheck.publication?.published ?? 0, downloaded: catalogCheck.publication?.downloaded ?? 0, errors: catalogCheck.publication?.errors ?? catalogCheck.errors ?? [] } : null,
       learning: {
         confidence: learning.confidence,
         preferred_weekdays: learning.preferred_weekdays,
-        schedule_is_learned: totalDownloadHits >= 2,
-        checks_this_week_limit: learning.max_checks_per_week,
-        last_check_at: learning.last_check_at,
+        schedule_is_learned: catalogCheck ? false : totalDownloadHits >= 2,
+        checks_this_week_limit: catalogCheck ? 7 : learning.max_checks_per_week,
+        last_check_at: lastCheck?.checked_at ?? learning.last_check_at,
         last_visit_at: learning.last_visit_at ?? lastCheck?.checked_at ?? null,
         last_visit_url: learning.last_visit_url ?? lastCheck?.visited_url ?? lastCheck?.source_page ?? null,
         last_downloaded_at: learning.last_downloaded_at,
-        next_check_at: learning.next_check_at,
+        next_check_at: catalogCheck ? nextCatalogCheck(retailer.id) : learning.next_check_at,
         download_hits: learning.weekday_download_hits,
       },
       ai: aiState ? {
