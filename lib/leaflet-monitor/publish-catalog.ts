@@ -16,7 +16,11 @@ export async function publishPublicCatalog(client: SupabaseClient, result: Catal
         const limit = leaflet.kind === "pdf" ? MAX_CATALOG_PDF_BYTES : 3 * 1024 * 1024;
         const bytes = await boundedBytes(await readCatalogSource(leaflet.sourceUrl,fetchImpl,limit),limit);
         if (leaflet.kind === "pdf" && new TextDecoder().decode(bytes.slice(0,5)) !== "%PDF-") throw new Error("invalid_pdf_signature");
-        const {error: storageError} = await client.storage.from("leaflet-intake").upload(leaflet.storagePath,bytes,{contentType: leaflet.kind === "pdf" ? "application/pdf" : "text/html",upsert:true});
+        // The existing private bucket accepts JSON but not text/html. Preserve
+        // the viewer snapshot as a JSON envelope; the public page opens the
+        // official viewer and never serves this archive as executable HTML.
+        const archive = leaflet.kind === "pdf" ? bytes : JSON.stringify({sourceUrl:leaflet.sourceUrl,checkedAt:result.checkedAt,html:new TextDecoder().decode(bytes)});
+        const {error: storageError} = await client.storage.from("leaflet-intake").upload(leaflet.storagePath,archive,{contentType: leaflet.kind === "pdf" ? "application/pdf" : "application/json",upsert:true});
         if (storageError) {
           // Quota/size failure must be visible, while the original official document remains browsable.
           storagePath = leaflet.storagePath.replace("/catalog-","/remote-catalog-");

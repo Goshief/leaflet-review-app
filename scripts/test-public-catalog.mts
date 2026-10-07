@@ -48,4 +48,14 @@ assert.ok(uploads>=3);
 existing=null;
 const rejected=await publishPublicCatalog(client as never,billa,async()=>new Response("not a PDF"));
 assert.equal(rejected.published,0);assert.ok(rejected.errors.some(e=>e.includes("invalid_pdf_signature")));
+existing=null;
+let viewerArchive:Record<string,unknown>|null=null;
+const viewerClient={...client,storage:{from:()=>({upload:async(path:string,body:unknown,options:{contentType:string})=>{
+  assert.equal(options.contentType,"application/json");
+  if(path.endsWith(".html")) viewerArchive=JSON.parse(String(body));
+  return {error:null};
+}})}};
+const viewerResult=await publishPublicCatalog(viewerClient as never,penny,async()=>new Response("<html>official viewer</html>"));
+assert.equal(viewerResult.downloaded,1);assert.equal(viewerResult.errors.length,0);
+assert.equal((viewerArchive as Record<string,unknown>|null)?.html,"<html>official viewer</html>");
 console.log("public catalog: source fixtures, validity, boundary checks, publication and repeat-run checks passed");
