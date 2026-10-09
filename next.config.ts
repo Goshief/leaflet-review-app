@@ -53,6 +53,12 @@ const nextConfig: NextConfig = {
   // Vercel tracing cannot discover those relative runtime requires reliably,
   // so include them explicitly in every serverless OCR route that uses them.
   outputFileTracingIncludes: {
+    "/api/cron/sync-leaflet-catalog/*": [
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+      "./node_modules/pdfjs-dist/standard_fonts/**/*",
+      "./node_modules/pdfjs-dist/cmaps/**/*",
+    ],
     "/api/leaflet-ai/process": [
       "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
       "./node_modules/pdfjs-dist/legacy/build/pdf.mjs",

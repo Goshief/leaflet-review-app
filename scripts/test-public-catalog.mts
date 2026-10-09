@@ -36,12 +36,15 @@ const failed=await collectPublicCatalog("albert",{today,fetchImpl:async()=>new R
 assert.equal(failed.status,"error"); assert.equal(failed.leaflets.length,0);
 let existing:Record<string,unknown>|null=null,downloads=0,uploads=0;
 const written:Record<string,unknown>[]=[];
-const client={from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:existing,error:null})})}),upsert:async(row:Record<string,unknown>)=>{written.push(row);existing={id:"id",storage_path:row.storage_path};return {error:null};},update:(row:Record<string,unknown>)=>({eq:async()=>{written.push(row);return {error:null};}})}),storage:{from:()=>({upload:async()=>{uploads++;return {error:null};}})}};
+const client={from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:existing,error:null})})}),upsert:async(row:Record<string,unknown>)=>{written.push(row);existing={id:"id",storage_path:row.storage_path,cover_storage_path:row.cover_storage_path,page_count:row.page_count};return {error:null};},update:(row:Record<string,unknown>)=>({eq:async()=>{written.push(row);return {error:null};}})}),storage:{from:()=>({upload:async()=>{uploads++;return {error:null};}})}};
+const renderCover=async()=>({jpeg:new Uint8Array([255,216,255,217]),pageCount:41});
 const pdfFetch=async()=>{downloads++;return new Response("%PDF-1.7\nfixture");};
-const first=await publishPublicCatalog(client as never,billa,pdfFetch);
+const first=await publishPublicCatalog(client as never,billa,pdfFetch,renderCover);
 assert.equal(first.published,1);assert.equal(first.downloaded,1);
 assert.equal(written[0].notification_status,"disabled");
-const second=await publishPublicCatalog(client as never,billa,pdfFetch);
+assert.equal(written[0].page_count,41);
+assert.match(String(written[0].cover_storage_path),/\.cover\.jpg$/);
+const second=await publishPublicCatalog(client as never,billa,pdfFetch,renderCover);
 assert.equal(second.published,1);assert.equal(second.downloaded,0);assert.equal(downloads,1);
 assert.equal(Object.hasOwn(written[1],"processing_status"),false);
 assert.ok(uploads>=3);
@@ -57,5 +60,6 @@ const viewerClient={...client,storage:{from:()=>({upload:async(path:string,body:
 }})}};
 const viewerResult=await publishPublicCatalog(viewerClient as never,penny,async()=>new Response("<html>official viewer</html>"));
 assert.equal(viewerResult.downloaded,1);assert.equal(viewerResult.errors.length,0);
+assert.equal(Object.hasOwn(written.at(-1)!,"page_count"),false);
 assert.equal((viewerArchive as Record<string,unknown>|null)?.html,"<html>official viewer</html>");
 console.log("public catalog: source fixtures, validity, boundary checks, publication and repeat-run checks passed");

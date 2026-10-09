@@ -1,4 +1,4 @@
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, DOMMatrix, ImageData, Path2D } from "@napi-rs/canvas";
 
 export type RenderedPdfPage = {
   page_no: number;
@@ -28,6 +28,9 @@ class NapiCanvasFactory {
 }
 
 async function loadPdfDocument(bytes: Uint8Array) {
+  // PDF.js may resolve its own optional canvas version. Keep paths, image data
+  // and the canvas factory from the same native module to avoid native crashes.
+  Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
   const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   (globalThis as typeof globalThis & { pdfjsWorker?: unknown }).pdfjsWorker = {
     WorkerMessageHandler: worker.WorkerMessageHandler,
@@ -35,7 +38,7 @@ async function loadPdfDocument(bytes: Uint8Array) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   return pdfjs.getDocument({
     data: Uint8Array.from(bytes),
-    canvasFactory: new NapiCanvasFactory(),
+    CanvasFactory: NapiCanvasFactory,
     disableFontFace: true,
     isEvalSupported: false,
   } as never).promise;
@@ -92,4 +95,18 @@ export async function countPdfPages(bytes: Uint8Array): Promise<number> {
   } finally {
     await doc.destroy();
   }
+}
+
+/** Bounded first-page JPEG for public cards; never renders every page. */
+export async function renderPdfCover(bytes: Uint8Array): Promise<{ jpeg: Uint8Array; pageCount: number }> {
+  const doc = await loadPdfDocument(bytes);
+  try {
+    const page = await doc.getPage(1);
+    const original = page.getViewport({ scale: 1 });
+    const scale = Math.min(1, 720 / Math.max(original.width, original.height));
+    const viewport = page.getViewport({ scale });
+    const canvas = createCanvas(Math.max(1, Math.ceil(viewport.width)), Math.max(1, Math.ceil(viewport.height)));
+    await page.render({ canvasContext: canvas.getContext("2d") as never, viewport }).promise;
+    return { jpeg: new Uint8Array(canvas.toBuffer("image/jpeg", 85)), pageCount: doc.numPages };
+  } finally { await doc.destroy(); }
 }
