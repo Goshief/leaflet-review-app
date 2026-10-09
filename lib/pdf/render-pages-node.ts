@@ -1,4 +1,4 @@
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, DOMMatrix, ImageData, Path2D } from "@napi-rs/canvas";
 
 export type RenderedPdfPage = {
   page_no: number;
@@ -28,6 +28,9 @@ class NapiCanvasFactory {
 }
 
 async function loadPdfDocument(bytes: Uint8Array) {
+  // PDF.js may resolve its own optional canvas version. Keep paths, image data
+  // and the canvas factory from the same native module to avoid native crashes.
+  Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
   const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   (globalThis as typeof globalThis & { pdfjsWorker?: unknown }).pdfjsWorker = {
     WorkerMessageHandler: worker.WorkerMessageHandler,
@@ -35,7 +38,7 @@ async function loadPdfDocument(bytes: Uint8Array) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   return pdfjs.getDocument({
     data: Uint8Array.from(bytes),
-    canvasFactory: new NapiCanvasFactory(),
+    CanvasFactory: NapiCanvasFactory,
     disableFontFace: true,
     isEvalSupported: false,
   } as never).promise;

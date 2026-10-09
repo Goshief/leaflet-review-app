@@ -49,7 +49,7 @@ export async function publishPublicCatalog(client: SupabaseClient, result: Catal
       const row = {
         retailer_id: leaflet.retailerId, internal_leaflet_key: leaflet.internalLeafletKey,
         storage_bucket: "leaflet-intake", storage_path: storagePath, filename: leaflet.filename,
-        source_url: leaflet.sourceUrl, cover_storage_path: coverPath, page_count: pageCount,
+        source_url: leaflet.sourceUrl, cover_storage_path: coverPath, ...(pageCount ? {page_count:pageCount} : {}),
         valid_from: leaflet.validFrom, valid_to: leaflet.validTo,
         ...(!existing ? { processing_status: "downloaded", notification_status: "disabled" } : {}),
       };

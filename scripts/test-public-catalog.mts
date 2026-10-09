@@ -60,5 +60,6 @@ const viewerClient={...client,storage:{from:()=>({upload:async(path:string,body:
 }})}};
 const viewerResult=await publishPublicCatalog(viewerClient as never,penny,async()=>new Response("<html>official viewer</html>"));
 assert.equal(viewerResult.downloaded,1);assert.equal(viewerResult.errors.length,0);
+assert.equal(Object.hasOwn(written.at(-1)!,"page_count"),false);
 assert.equal((viewerArchive as Record<string,unknown>|null)?.html,"<html>official viewer</html>");
 console.log("public catalog: source fixtures, validity, boundary checks, publication and repeat-run checks passed");
