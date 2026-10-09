@@ -93,3 +93,17 @@ export async function countPdfPages(bytes: Uint8Array): Promise<number> {
     await doc.destroy();
   }
 }
+
+/** Bounded first-page JPEG for public cards; never renders every page. */
+export async function renderPdfCover(bytes: Uint8Array): Promise<{ jpeg: Uint8Array; pageCount: number }> {
+  const doc = await loadPdfDocument(bytes);
+  try {
+    const page = await doc.getPage(1);
+    const original = page.getViewport({ scale: 1 });
+    const scale = Math.min(1, 720 / Math.max(original.width, original.height));
+    const viewport = page.getViewport({ scale });
+    const canvas = createCanvas(Math.max(1, Math.ceil(viewport.width)), Math.max(1, Math.ceil(viewport.height)));
+    await page.render({ canvasContext: canvas.getContext("2d") as never, viewport }).promise;
+    return { jpeg: new Uint8Array(canvas.toBuffer("image/jpeg", 85)), pageCount: doc.numPages };
+  } finally { await doc.destroy(); }
+}

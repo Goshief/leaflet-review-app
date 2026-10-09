@@ -1,20 +1,25 @@
+import { renderPdfCover } from "../pdf/render-pages-node.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { allowedCatalogDocument, boundedBytes, readCatalogSource, MAX_CATALOG_PDF_BYTES, type CatalogResult } from "./public-catalog.ts";
 
 export type CatalogPublication = { published: number; downloaded: number; errors: string[] };
 /** Publishes the browsable document independently of OCR/product approval. */
-export async function publishPublicCatalog(client: SupabaseClient, result: CatalogResult, fetchImpl: typeof fetch = fetch): Promise<CatalogPublication> {
+export async function publishPublicCatalog(client: SupabaseClient, result: CatalogResult, fetchImpl: typeof fetch = fetch, renderCover: typeof renderPdfCover = renderPdfCover): Promise<CatalogPublication> {
   const outcome: CatalogPublication = { published: 0, downloaded: 0, errors: [...result.errors] };
   for (const leaflet of result.leaflets) {
     try {
       if (!allowedCatalogDocument(leaflet.retailerId,leaflet.sourceUrl,leaflet.kind)) throw new Error("untrusted_document");
-      const {data: existing, error: lookupError} = await client.from("leaflet_documents").select("id,storage_path").eq("internal_leaflet_key",leaflet.internalLeafletKey).maybeSingle();
+      const {data: existing, error: lookupError} = await client.from("leaflet_documents").select("id,storage_path,cover_storage_path,page_count").eq("internal_leaflet_key",leaflet.internalLeafletKey).maybeSingle();
       if (lookupError) throw new Error(`document_lookup: ${lookupError.message}`);
       let storagePath = existing?.storage_path ?? leaflet.storagePath;
+      let coverPath = existing?.cover_storage_path || leaflet.coverUrl;
+      let pageCount = existing?.page_count ?? null;
+      let pdfBytes: Uint8Array | null = null;
       // A remote fallback is retried on the next scheduled run. An archived copy is downloaded once.
       if (!existing || String(storagePath).includes("/remote-catalog-")) {
         const limit = leaflet.kind === "pdf" ? MAX_CATALOG_PDF_BYTES : 3 * 1024 * 1024;
         const bytes = await boundedBytes(await readCatalogSource(leaflet.sourceUrl,fetchImpl,limit),limit);
+        if (leaflet.kind === "pdf") pdfBytes = bytes;
         if (leaflet.kind === "pdf" && new TextDecoder().decode(bytes.slice(0,5)) !== "%PDF-") throw new Error("invalid_pdf_signature");
         // The existing private bucket accepts JSON but not text/html. Preserve
         // the viewer snapshot as a JSON envelope; the public page opens the
@@ -27,10 +32,24 @@ export async function publishPublicCatalog(client: SupabaseClient, result: Catal
           outcome.errors.push(`${leaflet.retailerId}: storage_upload_failed`);
         } else { storagePath = leaflet.storagePath; outcome.downloaded++; }
       }
+      if (leaflet.kind === "pdf" && (!coverPath || !pageCount)) {
+        try {
+          if (!pdfBytes) pdfBytes = await boundedBytes(await readCatalogSource(leaflet.sourceUrl,fetchImpl,MAX_CATALOG_PDF_BYTES),MAX_CATALOG_PDF_BYTES);
+          if (new TextDecoder().decode(pdfBytes.slice(0,5)) !== "%PDF-") throw new Error("invalid_pdf_signature");
+          const preview = await renderCover(pdfBytes);
+          pageCount = preview.pageCount;
+          if (!coverPath) {
+            const path = leaflet.storagePath.replace(/\.pdf$/, ".cover.jpg");
+            const {error: coverError} = await client.storage.from("leaflet-intake").upload(path,preview.jpeg,{contentType:"image/jpeg",upsert:true});
+            if (coverError) throw new Error("cover_upload_failed");
+            coverPath = path;
+          }
+        } catch { outcome.errors.push(`${leaflet.retailerId}: cover_generation_failed`); }
+      }
       const row = {
         retailer_id: leaflet.retailerId, internal_leaflet_key: leaflet.internalLeafletKey,
         storage_bucket: "leaflet-intake", storage_path: storagePath, filename: leaflet.filename,
-        source_url: leaflet.sourceUrl, cover_storage_path: leaflet.coverUrl,
+        source_url: leaflet.sourceUrl, cover_storage_path: coverPath, page_count: pageCount,
         valid_from: leaflet.validFrom, valid_to: leaflet.validTo,
         ...(!existing ? { processing_status: "downloaded", notification_status: "disabled" } : {}),
       };
