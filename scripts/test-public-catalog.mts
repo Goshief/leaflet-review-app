@@ -52,6 +52,12 @@ existing=null;
 const rejected=await publishPublicCatalog(client as never,billa,async()=>new Response("not a PDF"));
 assert.equal(rejected.published,0);assert.ok(rejected.errors.some(e=>e.includes("invalid_pdf_signature")));
 existing=null;
+let blockedDownloads=0;
+const blocked=await publishPublicCatalog(client as never,billa,async()=>{blockedDownloads++;return new Response("unavailable",{status:522});},async()=>{throw new Error("must_not_render_unavailable_pdf");});
+assert.equal(blocked.published,1);assert.equal(blocked.downloaded,0);assert.equal(blockedDownloads,1);
+assert.match(String(written.at(-1)!.storage_path),/\/remote-catalog-/);
+assert.ok(blocked.errors.includes("billa: source_download_failed"));
+existing=null;
 let viewerArchive:Record<string,unknown>|null=null;
 const viewerClient={...client,storage:{from:()=>({upload:async(path:string,body:unknown,options:{contentType:string})=>{
   assert.equal(options.contentType,"application/json");

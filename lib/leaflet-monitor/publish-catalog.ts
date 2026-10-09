@@ -15,8 +15,10 @@ export async function publishPublicCatalog(client: SupabaseClient, result: Catal
       let coverPath = existing?.cover_storage_path || leaflet.coverUrl;
       let pageCount = existing?.page_count ?? null;
       let pdfBytes: Uint8Array | null = null;
+      let sourceUnavailable = false;
       // A remote fallback is retried on the next scheduled run. An archived copy is downloaded once.
       if (!existing || String(storagePath).includes("/remote-catalog-")) {
+        try {
         const limit = leaflet.kind === "pdf" ? MAX_CATALOG_PDF_BYTES : 3 * 1024 * 1024;
         const bytes = await boundedBytes(await readCatalogSource(leaflet.sourceUrl,fetchImpl,limit),limit);
         if (leaflet.kind === "pdf") pdfBytes = bytes;
@@ -31,8 +33,19 @@ export async function publishPublicCatalog(client: SupabaseClient, result: Catal
           storagePath = leaflet.storagePath.replace("/catalog-","/remote-catalog-");
           outcome.errors.push(`${leaflet.retailerId}: storage_upload_failed`);
         } else { storagePath = leaflet.storagePath; outcome.downloaded++; }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "unknown";
+          const transient = /^source_http_[45]\d\d$/.test(message) || (error instanceof Error && ["TypeError","TimeoutError","AbortError"].includes(error.name));
+          if (!transient) throw error;
+          // The official current document can remain browsable in the user's
+          // browser even when the ingestion server cannot reach its asset host.
+          // Publish trusted metadata and retry the archive on the next cron run.
+          sourceUnavailable = true;
+          storagePath = leaflet.storagePath.replace("/catalog-","/remote-catalog-");
+          outcome.errors.push(`${leaflet.retailerId}: source_download_failed`);
+        }
       }
-      if (leaflet.kind === "pdf" && (!coverPath || !pageCount)) {
+      if (!sourceUnavailable && leaflet.kind === "pdf" && (!coverPath || !pageCount)) {
         try {
           if (!pdfBytes) pdfBytes = await boundedBytes(await readCatalogSource(leaflet.sourceUrl,fetchImpl,MAX_CATALOG_PDF_BYTES),MAX_CATALOG_PDF_BYTES);
           if (new TextDecoder().decode(pdfBytes.slice(0,5)) !== "%PDF-") throw new Error("invalid_pdf_signature");
