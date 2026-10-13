@@ -18,6 +18,7 @@ const doc = (patch: Partial<PendingLeafletDocument> = {}): PendingLeafletDocumen
 
 assert.equal(isPendingLeafletDocument(doc(), today, staleBefore), true);
 assert.equal(isPendingLeafletDocument(doc({ valid_to: "2026-10-12" }), today, staleBefore), false);
+assert.equal(isPendingLeafletDocument(doc({ retailer_id: "albert" }), today, staleBefore), false);
 assert.equal(isPendingLeafletDocument(doc({ storage_path: "lidl/remote-catalog-current.pdf" }), today, staleBefore), false);
 assert.equal(isPendingLeafletDocument(doc({ storage_path: "penny/catalog-current.html" }), today, staleBefore), false);
 assert.equal(isPendingLeafletDocument(doc({ processing_status: "ready_for_review" }), today, staleBefore), false);
