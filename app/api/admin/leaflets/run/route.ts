@@ -22,9 +22,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Neznámý retailer." }, { status: 400 });
   }
 
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) return NextResponse.json({ ok: false, error: "CRON_SECRET není nakonfigurovaný." }, { status: 503 });
+
   const path = SPECIAL[retailer] ?? `/api/cron/fetch-leaflet/${encodeURIComponent(retailer)}`;
   const target = new URL(`${path}?manual=1`, request.url);
-  const response = await fetch(target, { method: "GET", cache: "no-store", redirect: "follow" });
+  const response = await fetch(target, {
+    method: "GET",
+    cache: "no-store",
+    redirect: "follow",
+    headers: { authorization: `Bearer ${secret}` },
+  });
   const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
   if (!response.ok) {
     return NextResponse.json({ ok: false, error: String(payload?.error ?? `Crawler HTTP ${response.status}`), crawler: payload }, { status: response.status });
