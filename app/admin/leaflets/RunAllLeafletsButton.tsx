@@ -11,6 +11,10 @@ export function RunAllLeafletsButton() {
   const [message, setMessage] = useState<string | null>(null);
 
   async function runAll() {
+    const approved = window.confirm(
+      "Odešle kontrolu všem 12 obchodům. Může uložit nové dokumenty a soubory do Storage, ale neschvaluje ani nezveřejňuje nabídky. Pokračovat?"
+    );
+    if (!approved) return;
     setRunning(true);
     setMessage("Spouštím 0/12…");
     let ok = 0;

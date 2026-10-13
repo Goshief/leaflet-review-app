@@ -32,6 +32,18 @@ function ymdPrague() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
+function processingLabel(status: string | null | undefined) {
+  const labels: Record<string, string> = {
+    downloaded: "Čeká na zpracování",
+    processing: "Zpracovává se",
+    ready_for_review: "Čeká na kontrolu",
+    partially_reviewed: "Částečně schváleno",
+    completed: "Zkontrolováno",
+    failed: "Chyba zpracování",
+  };
+  return status ? labels[status] ?? status : "Nezpracováno";
+}
+
 export default async function LeafletAdminPage() {
   const auth = await createClient();
   const { data: authData } = await auth.auth.getUser();
@@ -43,7 +55,7 @@ export default async function LeafletAdminPage() {
   const [docsRes, intakeRes] = await Promise.all([
     supabase
       .from("leaflet_documents")
-      .select("id,retailer_id,filename,source_url,valid_from,valid_to,page_count,cover_storage_path,storage_path,processing_status,created_at,updated_at")
+      .select("id,retailer_id,filename,source_url,valid_from,valid_to,page_count,processed_pages,candidate_count,unreviewed_count,approved_count,rejected_count,quarantine_count,cover_storage_path,storage_path,processing_status,created_at,updated_at")
       .order("created_at", { ascending: false })
       .limit(500),
     supabase
@@ -64,6 +76,7 @@ export default async function LeafletAdminPage() {
     const retailerDocs = docs.filter((row: any) => String(row.retailer_id) === id);
     const activeDocs = retailerDocs.filter((row: any) => row.valid_from && row.valid_to && row.valid_from <= today && row.valid_to >= today);
     const latestDoc = retailerDocs[0] ?? null;
+    const latestActiveDoc = activeDocs[0] ?? null;
     const latestIntake = intake.find((row: any) => String(row.store_id) === id) ?? null;
     const pageReady = activeDocs.filter((row: any) => Number(row.page_count) > 0).length;
     const coverReady = activeDocs.filter((row: any) => Boolean(row.cover_storage_path)).length;
@@ -75,7 +88,7 @@ export default async function LeafletAdminPage() {
         : activeDocs.length > 0
           ? "NEÚPLNÉ"
           : "BEZ AKTUÁLNÍHO";
-    return { id, name, retailerDocs, activeDocs, latestDoc, latestIntake, pageReady, coverReady, status };
+    return { id, name, retailerDocs, activeDocs, latestDoc, latestActiveDoc, latestIntake, pageReady, coverReady, status };
   });
 
   const okCount = rows.filter((row) => row.status === "OK").length;
@@ -93,6 +106,7 @@ export default async function LeafletAdminPage() {
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <RunAllLeafletsButton />
+            <Link href="/upload" className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-900">Zpracování a kontrola nabídek</Link>
             <Link href="/" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold">Zpět</Link>
           </div>
         </div>
@@ -112,6 +126,7 @@ export default async function LeafletAdminPage() {
                 <th className="px-4 py-3">Aktivní</th>
                 <th className="px-4 py-3">Stránky</th>
                 <th className="px-4 py-3">Cover</th>
+                <th className="px-4 py-3">Zpracování nabídek</th>
                 <th className="px-4 py-3">Poslední kontrola</th>
                 <th className="px-4 py-3">Platnost</th>
                 <th className="px-4 py-3">Storage / zdroj</th>
@@ -129,6 +144,17 @@ export default async function LeafletAdminPage() {
                   <td className="px-4 py-4 font-bold">{row.activeDocs.length}</td>
                   <td className="px-4 py-4">{row.pageReady}/{row.activeDocs.length || 0}</td>
                   <td className="px-4 py-4">{row.coverReady}/{row.activeDocs.length || 0}</td>
+                  <td className="px-4 py-4 min-w-56">
+                    {row.latestActiveDoc ? (
+                      <>
+                        <div className="font-bold">{processingLabel(row.latestActiveDoc.processing_status)}</div>
+                        <div className="mt-1 text-xs text-slate-600">
+                          {row.latestActiveDoc.processed_pages ?? 0}/{row.latestActiveDoc.page_count ?? "?"} stran · {row.latestActiveDoc.candidate_count ?? 0} položek · {row.latestActiveDoc.unreviewed_count ?? 0} čeká na kontrolu
+                        </div>
+                      </>
+                    ) : <span className="text-slate-500">Bez aktuálního PDF</span>}
+                    <Link href="/upload" className="mt-2 inline-block text-xs font-bold text-blue-700 underline">Otevřít zpracování</Link>
+                  </td>
                   <td className="px-4 py-4 whitespace-nowrap">{fmt(row.latestIntake?.created_at)}</td>
                   <td className="px-4 py-4 whitespace-nowrap">{row.latestDoc?.valid_from && row.latestDoc?.valid_to ? `${row.latestDoc.valid_from} – ${row.latestDoc.valid_to}` : "—"}</td>
                   <td className="px-4 py-4"><code className="block max-w-72 break-all text-[11px]">{row.latestDoc?.storage_path ?? row.latestIntake?.pdf_source_url ?? "—"}</code></td>
