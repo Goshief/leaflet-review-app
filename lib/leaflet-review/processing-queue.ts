@@ -15,7 +15,7 @@ export function isPendingLeafletDocument(
   today: string,
   staleBefore: string,
 ): boolean {
-  if (!doc.id || !doc.retailer_id || doc.storage_bucket !== "leaflet-intake") return false;
+  if (!doc.id || !doc.retailer_id || doc.retailer_id === "albert" || doc.storage_bucket !== "leaflet-intake") return false;
   if (!doc.storage_path.toLowerCase().endsWith(".pdf")) return false;
   if (doc.storage_path.toLowerCase().includes("remote-catalog-")) return false;
   if (!doc.valid_to || doc.valid_to < today) return false;
