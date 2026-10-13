@@ -6,6 +6,7 @@ import { applyBrandAliases, loadBrandAliases } from "./brand-resolver";
 import { applyVariantEvidence } from "./variant-resolver";
 import { applyPromoEvidence } from "./promo-resolver";
 import { sendLeafletNotification } from "./notify";
+import { preserveCatalogValidity } from "./processing-queue";
 
 const EXTRACTOR_MODEL = "local-pdf-text-layout-v3";
 function pad(n:number){return String(n).padStart(2,"0")}
@@ -42,7 +43,7 @@ export async function processLeafletPdf(args:{supabase:any;bucket:string;path:st
  const s=args.supabase;let bytes=args.bytes;if(!bytes){const{data,error}=await s.storage.from(args.bucket).download(args.path);if(error||!data)throw new Error(error?.message||"PDF nebylo nalezeno.");bytes=new Uint8Array(await data.arrayBuffer());}
  const doc=await loadPdfDocument(bytes);
  try{
-  const brandAliases=await loadBrandAliases(s);const importId=await ensureImport(s,{bucket:args.bucket,path:args.path,retailer:args.retailer,sourceUrl:args.sourceUrl});let firstText="";for(let p=1;p<=Math.min(2,doc.numPages);p++)firstText+=(await pageWords(doc,p)).text+" ";const validity=parseValidity(firstText,args.path,args.sourceUrl);const filename=args.path.split("/").pop()||args.path;const internalKey=`${args.retailer}:${createHash("sha1").update(`${args.bucket}/${args.path}`).digest("hex")}`;
+  const brandAliases=await loadBrandAliases(s);const importId=await ensureImport(s,{bucket:args.bucket,path:args.path,retailer:args.retailer,sourceUrl:args.sourceUrl});let firstText="";for(let p=1;p<=Math.min(2,doc.numPages);p++)firstText+=(await pageWords(doc,p)).text+" ";const extractedValidity=parseValidity(firstText,args.path,args.sourceUrl);const{data:storedDocument,error:storedDocumentError}=await s.from("leaflet_documents").select("valid_from,valid_to").eq("storage_bucket",args.bucket).eq("storage_path",args.path).maybeSingle();if(storedDocumentError)throw new Error("existing leaflet validity: "+storedDocumentError.message);const validity=preserveCatalogValidity(extractedValidity,{from:storedDocument?.valid_from??null,to:storedDocument?.valid_to??null});const filename=args.path.split("/").pop()||args.path;const internalKey=`${args.retailer}:${createHash("sha1").update(`${args.bucket}/${args.path}`).digest("hex")}`;
   const base={retailer_id:args.retailer,storage_bucket:args.bucket,storage_path:args.path,filename,source_url:args.sourceUrl,source_leaflet_number:null,internal_leaflet_key:internalKey,valid_from:validity.from,valid_to:validity.to,page_count:doc.numPages,processing_status:"processing",import_id:importId,processing_error:null,updated_at:new Date().toISOString()};const{data:leaflet,error:le}=await s.from("leaflet_documents").upsert(base,{onConflict:"storage_bucket,storage_path"}).select("*").single();if(le||!leaflet)throw new Error(le?.message||"Leaflet document nebyl uložen.");
   await ensurePageRows(s,leaflet.id,doc.numPages,args.sourceUrl);const states=await getPageStates(s,leaflet.id);const stateByPage=new Map(states.map((x:any)=>[Number(x.page_no),x]));let pages:number[];
   if(args.page){pages=[args.page];}else if(args.force){pages=Array.from({length:doc.numPages},(_,i)=>i+1);}else{pages=states.filter((x:any)=>x.status!=="completed").map((x:any)=>Number(x.page_no));}
