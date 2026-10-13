@@ -35,3 +35,20 @@ export function selectNextPendingLeaflet(
     .sort((a, b) => a.valid_to!.localeCompare(b.valid_to!)
       || a.created_at.localeCompare(b.created_at))[0] ?? null;
 }
+
+export type LeafletValidityEvidence = {
+  from: string | null;
+  to: string | null;
+  source: string | null;
+};
+
+export function preserveCatalogValidity(
+  extracted: LeafletValidityEvidence,
+  stored: { from: string | null; to: string | null },
+): LeafletValidityEvidence {
+  return {
+    from: extracted.from ?? stored.from,
+    to: extracted.to ?? stored.to,
+    source: extracted.source ?? (stored.from || stored.to ? "catalog_metadata" : null),
+  };
+}
