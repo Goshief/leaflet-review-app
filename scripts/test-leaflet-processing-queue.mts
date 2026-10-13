@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { isPendingLeafletDocument, selectNextPendingLeaflet, type PendingLeafletDocument } from "../lib/leaflet-review/processing-queue.ts";
+import { isPendingLeafletDocument, preserveCatalogValidity, selectNextPendingLeaflet, type PendingLeafletDocument } from "../lib/leaflet-review/processing-queue.ts";
 
 const today = "2026-10-13";
 const staleBefore = "2026-10-13T06:00:00.000Z";
@@ -30,5 +30,14 @@ const selected = selectNextPendingLeaflet([
   doc({ id: "same-expiry-older", valid_to: "2026-10-14", created_at: "2026-10-12T07:00:00.000Z" }),
 ], today, staleBefore);
 assert.equal(selected?.id, "same-expiry-older");
+
+assert.deepEqual(preserveCatalogValidity(
+  { from: null, to: null, source: null },
+  { from: "2026-10-12", to: "2026-10-14" },
+), { from: "2026-10-12", to: "2026-10-14", source: "catalog_metadata" });
+assert.deepEqual(preserveCatalogValidity(
+  { from: "2026-10-13", to: "2026-10-15", source: "12.10.-14.10.2026" },
+  { from: "2026-10-12", to: "2026-10-14" },
+), { from: "2026-10-13", to: "2026-10-15", source: "12.10.-14.10.2026" });
 
 console.log("PASS pending leaflet queue: current PDFs only, stale-run recovery, expiring-first ordering");
