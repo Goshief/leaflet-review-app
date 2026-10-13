@@ -73,10 +73,6 @@
     {
       "path": "/api/cron/storage-cleanup",
       "schedule": "50 11 * * *"
-    },
-    {
-      "path": "/api/cron/process-pending-leaflets",
-      "schedule": "15 8 * * *"
     }
   ]
 }
