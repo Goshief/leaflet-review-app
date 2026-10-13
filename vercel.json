@@ -76,7 +76,7 @@
     },
     {
       "path": "/api/cron/process-pending-leaflets",
-      "schedule": "*/15 * * * *"
+      "schedule": "15 8 * * *"
     }
   ]
 }
